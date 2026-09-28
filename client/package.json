@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "preview": "vite preview"
+    "build:pages": "tsc -b && VITE_DEMO=true VITE_BASE=/kamil/ vite build --mode pages",
+    "preview": "vite preview",
+    "preview:pages": "vite preview --base /kamil/"
   },
   "dependencies": {
     "react": "^18.3.1",

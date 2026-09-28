@@ -10,3 +10,4 @@ uploads/
 !.env.example
 *.log
 .DS_Store
+*.tsbuildinfo
