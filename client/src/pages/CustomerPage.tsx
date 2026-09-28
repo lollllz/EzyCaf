@@ -64,8 +64,8 @@ export default function CustomerPage() {
   }
 
   return (
-    <div className="min-h-screen bg-cream pb-36">
-      <header className="sticky top-0 z-20 border-b border-line bg-cream/95 backdrop-blur px-4 py-4">
+    <div className="flex min-h-[100dvh] flex-col bg-cream">
+      <header className="sticky top-0 z-20 shrink-0 border-b border-line bg-cream/95 backdrop-blur px-4 py-4">
         <div className="mx-auto flex max-w-2xl items-center gap-3">
           {brand?.logoUrl ? (
             <img src={brand.logoUrl} alt="" className="h-10 w-auto max-w-[160px] rounded-lg object-contain" />
@@ -84,7 +84,7 @@ export default function CustomerPage() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-2xl px-4 py-6 space-y-8">
+      <main className="mx-auto w-full max-w-2xl flex-1 overflow-y-auto px-4 py-6 space-y-8">
         {!table && hub ? (
           <div className="card p-6 text-center">
             <p className="font-semibold">Table not found</p>
@@ -134,8 +134,8 @@ export default function CustomerPage() {
         ) : null}
       </main>
 
-      {/* Sticky cart */}
-      <div className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-white/95 backdrop-blur shadow-[0_-8px_30px_rgba(0,0,0,0.06)]">
+      {/* Bottom-docked cart — flex footer, not fixed (avoids mid-viewport on Pages) */}
+      <div className="sticky bottom-0 z-30 shrink-0 border-t border-line bg-white/95 backdrop-blur shadow-[0_-8px_30px_rgba(0,0,0,0.06)] pb-[env(safe-area-inset-bottom)]">
         <div className="mx-auto max-w-2xl px-4 py-3 space-y-2">
           {lines.length > 0 ? (
             <div className="motion-cart-expand space-y-2 overflow-hidden">
@@ -168,7 +168,7 @@ export default function CustomerPage() {
       </div>
 
       {toast ? (
-        <div className="motion-toast fixed left-1/2 top-20 z-50 -translate-x-1/2 rounded-xl bg-ink px-4 py-3 text-sm font-medium text-white shadow-lg">
+        <div className="motion-toast fixed left-1/2 top-24 z-50 -translate-x-1/2 rounded-xl bg-ink px-4 py-3 text-sm font-medium text-white shadow-lg">
           {toast}
         </div>
       ) : null}

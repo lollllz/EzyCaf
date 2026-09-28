@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import QRCode from 'qrcode';
 import { useSocket } from '../hooks/useSocket';
 
 function tablePublicUrl(baseUrl: string, tableId: string, hashMode: boolean): string {
@@ -7,44 +8,57 @@ function tablePublicUrl(baseUrl: string, tableId: string, hashMode: boolean): st
   return hashMode ? `${base}/#/t/${tableId}` : `${base}/t/${tableId}`;
 }
 
-function qrImgHtml(url: string): string {
-  const src = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&margin=8&data=${encodeURIComponent(url)}`;
-  return `<img src="${src}" width="200" height="200" alt="QR" style="display:block" />`;
+async function qrSvg(url: string): Promise<string> {
+  return QRCode.toString(url, {
+    type: 'svg',
+    errorCorrectionLevel: 'M',
+    margin: 2,
+    width: 200,
+    color: { dark: '#000000', light: '#FFFFFF' },
+  });
 }
 
 export default function HubPage() {
   const { hub, connected, isDemo } = useSocket();
   const [qrMap, setQrMap] = useState<Record<string, string>>({});
-  const hashMode = import.meta.env.VITE_DEMO === 'true';
+  const hashMode = import.meta.env.VITE_DEMO === 'true' || isDemo;
 
   useEffect(() => {
-    if (!hub?.tables) return;
+    if (!hub?.tables?.length || !hub.baseUrl) return;
     let cancelled = false;
     (async () => {
       const next: Record<string, string> = {};
-      if (isDemo || import.meta.env.VITE_DEMO === 'true') {
-        for (const t of hub.tables) {
-          const url = tablePublicUrl(hub.baseUrl, t.id, true);
-          next[t.id] = qrImgHtml(url);
-        }
-      } else {
-        await Promise.all(
-          hub.tables.map(async (t) => {
-            try {
+      await Promise.all(
+        hub.tables.map(async (t) => {
+          try {
+            if (isDemo || import.meta.env.VITE_DEMO === 'true') {
+              const url = tablePublicUrl(hub.baseUrl, t.id, true);
+              next[t.id] = await qrSvg(url);
+            } else {
               const res = await fetch(`/api/qr/${t.id}`);
-              if (res.ok) next[t.id] = await res.text();
-            } catch {
-              /* ignore */
+              if (res.ok) {
+                next[t.id] = await res.text();
+              } else {
+                const url = tablePublicUrl(hub.baseUrl, t.id, false);
+                next[t.id] = await qrSvg(url);
+              }
             }
-          })
-        );
-      }
+          } catch {
+            try {
+              const url = tablePublicUrl(hub.baseUrl, t.id, hashMode);
+              next[t.id] = await qrSvg(url);
+            } catch {
+              /* leave blank placeholder */
+            }
+          }
+        })
+      );
       if (!cancelled) setQrMap(next);
     })();
     return () => {
       cancelled = true;
     };
-  }, [hub?.tables, hub?.baseUrl, isDemo]);
+  }, [hub?.tables, hub?.baseUrl, isDemo, hashMode]);
 
   const brand = hub?.brand;
 
@@ -90,12 +104,12 @@ export default function HubPage() {
                     />
                   ) : null}
                   <div
-                    className="mb-4 flex items-center justify-center bg-white p-2"
+                    className="mb-4 flex items-center justify-center bg-white p-2 [&_svg]:h-[200px] [&_svg]:w-[200px]"
                     style={{ width: 220, height: 220 }}
                     dangerouslySetInnerHTML={{
                       __html:
                         qrMap[t.id] ||
-                        '<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><rect width="200" height="200" fill="#fff"/><text x="50%" y="50%" text-anchor="middle" fill="#999">…</text></svg>',
+                        '<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><rect width="200" height="200" fill="#fff"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="#999" font-size="14">…</text></svg>',
                     }}
                   />
                   <p className="text-lg font-bold">{t.label}</p>
