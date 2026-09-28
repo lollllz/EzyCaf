@@ -6,7 +6,7 @@ Designed for a tablet/phone on the same Wi‑Fi. No cloud required (optional Sup
 
 ## Live demo (GitHub Pages)
 
-**https://lollllz.github.io/kamil/**
+**https://lollllz.github.io/EzyCaf/**
 
 Static client-only demo with in-memory orders (Customer → Kitchen → Cashier). No Node Hub on Pages — real ordering needs the LAN Hub below.
 
