@@ -1,4 +1,4 @@
-# Kamil
+#EzCaf
 
 Local-network restaurant order management — Hub QR board, customer ordering, kitchen display (KDS), cashier, and admin.
 
