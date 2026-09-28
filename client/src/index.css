@@ -1,0 +1,133 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --accent: #0F766E;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  font-size: 16px;
+  line-height: 1.5;
+  color: #1A1A1A;
+  background: #F6F4F1;
+}
+
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 font-semibold transition active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none;
+    min-height: 44px;
+  }
+  .btn-accent {
+    background: var(--accent);
+    color: white;
+  }
+  .btn-accent:hover {
+    filter: brightness(1.05);
+  }
+  .btn-ghost {
+    @apply bg-white border border-line text-ink;
+  }
+  .card {
+    @apply bg-white rounded-2xl border border-line shadow-sm;
+  }
+  .input {
+    @apply w-full rounded-xl border border-line bg-white px-3 py-2.5 text-base text-ink outline-none focus:ring-2;
+    min-height: 44px;
+  }
+  .input:focus {
+    --tw-ring-color: var(--accent);
+  }
+  .chip {
+    @apply inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-white;
+    transition: background-color 180ms ease-out, opacity 180ms ease-out, transform 180ms ease-out;
+  }
+
+  /* Calm kitchen-readable motion — no bounce */
+  .motion-fade {
+    animation: motionFadeIn 180ms ease-out both;
+  }
+  .motion-chip {
+    animation: motionChipIn 160ms ease-out both;
+  }
+  .motion-tile {
+    animation: motionTileIn 200ms ease-out both;
+  }
+  .motion-cart-expand {
+    animation: motionCartExpand 200ms ease-out both;
+  }
+  .motion-toast {
+    animation: motionToastIn 180ms ease-out both;
+  }
+}
+
+@keyframes motionFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes motionChipIn {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes motionTileIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes motionCartExpand {
+  from {
+    opacity: 0;
+    max-height: 0;
+  }
+  to {
+    opacity: 1;
+    max-height: 120px;
+  }
+}
+
+@keyframes motionToastIn {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -6px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .motion-fade,
+  .motion-chip,
+  .motion-tile,
+  .motion-cart-expand,
+  .motion-toast,
+  .chip {
+    animation: none !important;
+    transition: none !important;
+  }
+}
