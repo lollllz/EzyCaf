@@ -25,7 +25,7 @@ npx gh-pages -d client/dist  # or: npm run deploy:pages
 ## Quick start (LAN Hub)
 
 ```bash
-cd /workspace/kamil
+cd EzyCaf
 ./start.sh
 ```
 
