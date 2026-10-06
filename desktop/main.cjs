@@ -45,6 +45,7 @@ async function start() {
   window.webContents.on('will-navigate', (event, url) => { if (new URL(url).origin !== origin) event.preventDefault(); });
   const setup = await (await fetch(`${origin}/api/setup`)).json();
   await window.loadURL(`${origin}${setup.complete ? '/' : '/setup'}`);
+  if (process.env.EZYCAF_SMOKE_TEST === '1') setTimeout(() => app.quit(), 5000);
 }
 
 if (!app.requestSingleInstanceLock()) app.quit();

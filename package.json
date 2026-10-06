@@ -27,11 +27,15 @@
     "electron-builder": "26.15.3"
   },
   "dependencies": {
-    "better-sqlite3": "^11.7.0",
+    "better-sqlite3": "13.0.3",
     "cors": "^2.8.5",
     "express": "^4.21.2",
     "multer": "^1.4.5-lts.1",
     "qrcode": "^1.5.4",
     "socket.io": "^4.8.1"
+  },
+  "author": {
+    "name": "lollllz",
+    "email": "110182272+lollllz@users.noreply.github.com"
   }
 }
