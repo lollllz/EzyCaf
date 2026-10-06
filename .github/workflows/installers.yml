@@ -48,3 +48,14 @@ jobs:
         with:
           name: EzyCaf-Staff-test-apk
           path: android/app/build/outputs/apk/debug/*.apk
+  customer-bundle:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: node scripts/smoke-customer-bundle.mjs
