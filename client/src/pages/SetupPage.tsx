@@ -83,7 +83,13 @@ export default function SetupPage() {
           <h2 className="text-xl font-semibold">Choose customer access</h2>
           <label className="flex items-start gap-3"><input className="mt-1 h-5 w-5" type="radio" checked={!publicMode} onChange={() => setPublicMode(false)} /><span><strong>Local only</strong><span className="block text-sm text-muted">No hosting cost or internet required. Customers must join cafe Wi-Fi; display guest-network instructions beside the QR.</span></span></label>
           <label className="flex items-start gap-3"><input className="mt-1 h-5 w-5" type="radio" checked={publicMode} onChange={() => setPublicMode(true)} /><span><strong>Public customer ordering</strong><span className="block text-sm text-muted">Mobile data works for customers. You choose the hosting provider, domain and plan; the hub needs internet. Staff stays local.</span></span></label>
-          {publicMode ? <a className="btn btn-ghost w-full" href="/api/setup/deployment-bundle" download>Download customer service bundle</a> : null}
+          {publicMode ? <div className="space-y-3 rounded-xl bg-green-50 p-4 text-sm">
+            <h3 className="font-semibold">Choose where to host it</h3>
+            <p><strong>Managed container hosting:</strong> the provider runs the service and HTTPS for you. Choose a plan with a persistent disk and WebSockets; plans and ongoing costs vary.</p>
+            <p><strong>Your own server with Docker:</strong> more control over costs and configuration. You manage the domain, server updates and backups; the bundle includes HTTPS setup.</p>
+            <p>Static website hosting cannot run this service. The ZIP contains the app and deployment guide; each compatible provider has its own upload or build steps.</p>
+            <a className="btn btn-ghost w-full" href="/api/setup/deployment-bundle" download>Download customer service bundle</a>
+          </div> : null}
           <p className="text-sm text-muted">Optional. Deploy the customer service first, then pair it here. It needs internet on the hub, HTTPS hosting, and a unique pairing token. Kitchen, cashier and admin remain local. If the service is down, use cafe Wi-Fi and ask staff for the local table link.</p>
           {paired ? <><p className="break-all text-sm">Paired customer address: {serviceUrl}</p><button className="btn btn-ghost" disabled={saving} onClick={() => void unpairService()}>Disconnect customer service</button></> : publicMode ? <>
             <label className="block">Customer service address<input className="input mt-2" type="url" placeholder="https://order.your-cafe.example" value={serviceUrl} onChange={(e) => setServiceUrl(e.target.value)} /></label>
