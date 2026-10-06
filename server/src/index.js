@@ -1,7 +1,6 @@
 import express from 'express';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
-import cors from 'cors';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
@@ -17,20 +16,25 @@ import {
   getMenu,
   upsertMenuItem,
   deleteMenuItem,
-  createOrder,
   updateOrderStatus,
   getActiveOrders,
   getOrdersByTable,
   clearTable,
   getAllOrdersForCashier,
-  getOrder,
+  getPendingMenuDeletions,
+  acknowledgeMenuDeletions,
+  completeSetup,
+  getRelayConfig,
 } from './db.js';
 import { getLanIp, getBaseUrl } from './lan.js';
+import { acceptOrder } from './order-service.js';
+import { startCustomerRelay } from './customer-relay.js';
+import { allowedRequest } from './network-access.js';
 import { syncMenuToSupabase } from './supabase-sync.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, '..', '..');
-const UPLOADS = path.join(ROOT, 'uploads');
+const UPLOADS = process.env.EZYCAF_UPLOAD_DIR || path.join(ROOT, 'uploads');
 const CLIENT_DIST = path.join(ROOT, 'client', 'dist');
 const PORT = Number(process.env.PORT) || 3847;
 
@@ -41,10 +45,13 @@ initDb();
 const app = express();
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
-  cors: { origin: '*' },
+  allowRequest: (req, callback) => callback(null, allowedRequest(req)),
 });
 
-app.use(cors());
+app.use((req, res, next) => {
+  if (!allowedRequest(req)) return res.status(403).json({ error: 'Connect to the cafe Wi-Fi to use EzyCaf.' });
+  next();
+});
 app.use(express.json({ limit: '1mb' }));
 app.use('/uploads', express.static(UPLOADS));
 
@@ -78,6 +85,7 @@ function hubHello() {
     tables: getTables(),
     baseUrl: getBaseUrl(PORT),
     brand: brandPayload(),
+    customerUrl: getRelayConfig().url || '',
   };
 }
 
@@ -85,28 +93,96 @@ function emitMenuUpdated() {
   io.emit('menu:updated', getMenu());
 }
 
-async function maybeSyncMenu() {
-  const settings = getSettings();
-  if (!settings.supabaseSync) return;
-  const result = await syncMenuToSupabase(settings, getMenu());
-  if (result.ok) {
-    const ts = new Date().toISOString();
-    setSetting('lastSynced', ts);
-    io.emit('hub:hello', hubHello());
-  }
-  // Never throw — LAN must keep working
+let syncRunning = null;
+let syncRequested = false;
+function maybeSyncMenu() {
+  syncRequested = true;
+  if (syncRunning) return syncRunning;
+  syncRunning = (async () => {
+    while (syncRequested) {
+      syncRequested = false;
+      const settings = getSettings();
+      if (!settings.supabaseSync) continue;
+      const deletedIds = getPendingMenuDeletions();
+      const result = await syncMenuToSupabase(settings, getMenu(), deletedIds);
+      setSetting('syncError', result.ok ? '' : result.reason);
+      if (result.ok) {
+        acknowledgeMenuDeletions(deletedIds);
+        setSetting('lastSynced', new Date().toISOString());
+      }
+    }
+  })().finally(() => { syncRunning = null; });
+  return syncRunning;
 }
+
+// Retry durable cloud deletions after a restart or temporary outage.
+setInterval(() => maybeSyncMenu().catch(() => {}), 30000).unref();
+maybeSyncMenu().catch(() => {});
 
 // ——— REST ———
 
 app.get('/api/health', (_req, res) => {
   res.json({
     ok: true,
-    name: 'Kamil',
+    name: getSettings().name,
+    service: 'ezycaf-hub',
+    networkMode: 'lan-only',
     lan: getLanIp(),
     port: PORT,
     baseUrl: getBaseUrl(PORT),
   });
+});
+
+const relayTick = startCustomerRelay(() => ({ tables: getTables(), brand: brandPayload(), menu: getMenu() }), (payload, id) => {
+  const result = acceptOrder(payload, id);
+  if (result.created) io.emit('order:new', result.order);
+  return result;
+});
+
+app.post('/api/setup/customer-service', async (req, res) => {
+  const remote = req.socket.remoteAddress?.replace(/^::ffff:/, '');
+  if (remote !== '::1' && !remote?.startsWith('127.')) return res.status(403).json({ error: 'Pair the customer service on the host computer.' });
+  const { url, token } = req.body || {};
+  let parsed;
+  try { parsed = new URL(url); } catch { return res.status(400).json({ error: 'Enter the HTTPS customer service address.' }); }
+  if (parsed.protocol !== 'https:' || parsed.username || parsed.password || parsed.search || parsed.hash || parsed.pathname !== '/' || typeof token !== 'string' || token.length < 32 || token.length > 512) return res.status(400).json({ error: 'Use an HTTPS origin and a pairing token of at least 32 characters.' });
+  try {
+    const check = await fetch(`${parsed.origin}/relay/health`, { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(8000), redirect: 'error' });
+    if (!check.ok || (await check.json()).service !== 'ezycaf-customer-relay') throw new Error('Pairing failed. Check the address and token.');
+    setSetting('relayUrl', parsed.origin); setSetting('relayToken', token);
+    await relayTick();
+    io.emit('hub:hello', hubHello());
+    res.json({ ok: true });
+  } catch (error) { res.status(502).json({ error: error.message }); }
+});
+
+app.delete('/api/setup/customer-service', (req, res) => {
+  const remote = req.socket.remoteAddress?.replace(/^::ffff:/, '');
+  if (remote !== '::1' && !remote?.startsWith('127.')) return res.status(403).json({ error: 'Unpair on the host computer.' });
+  setSetting('relayUrl', ''); setSetting('relayToken', ''); io.emit('hub:hello', hubHello()); res.json({ ok: true });
+});
+
+app.get('/api/setup/deployment-bundle', (_req, res) => {
+  const bundle = path.join(CLIENT_DIST, 'downloads', 'EzyCaf-customer-service.zip');
+  if (!fs.existsSync(bundle)) return res.status(503).json({ error: 'Build the application to generate the deployment bundle.' });
+  res.download(bundle);
+});
+
+app.get('/api/setup', (_req, res) => {
+  res.json({ complete: getSettings().setupComplete, name: getSettings().name, tables: getTables(), baseUrl: getBaseUrl(PORT), networkMode: 'lan-only', customerService: { url: getRelayConfig().url, lastSeen: getRelayConfig().lastSeen, error: getRelayConfig().error } });
+});
+
+app.post('/api/setup', (req, res) => {
+  // Only the host computer can configure first-run setup.
+  const remote = req.socket.remoteAddress?.replace(/^::ffff:/, '');
+  if (remote !== '::1' && !remote?.startsWith('127.')) return res.status(403).json({ error: 'Run setup on the cafe host computer.' });
+  const { name, accent, tableCount } = req.body || {};
+  if (typeof name !== 'string' || !name.trim() || name.length > 80 || !/^#[0-9a-f]{6}$/i.test(accent || '') || !Number.isInteger(tableCount) || tableCount < 1 || tableCount > 100) {
+    return res.status(400).json({ error: 'Enter a cafe name, colour and 1–100 tables.' });
+  }
+  completeSetup({ name: name.trim(), accent, tableCount });
+  io.emit('hub:hello', hubHello());
+  res.json({ ok: true, baseUrl: getBaseUrl(PORT), tables: getTables() });
 });
 
 app.get('/api/settings', (_req, res) => {
@@ -187,10 +263,10 @@ app.put('/api/menu/:id', (req, res) => {
 });
 
 app.delete('/api/menu/:id', (req, res) => {
-  deleteMenuItem(req.params.id);
+  if (!deleteMenuItem(req.params.id)) return res.status(404).json({ error: 'Menu item not found' });
   emitMenuUpdated();
   maybeSyncMenu().catch(() => {});
-  res.json({ ok: true });
+  res.json({ ok: true, cloudSync: getSettings().supabaseSync ? 'pending' : 'off' });
 });
 
 app.get('/api/orders', (_req, res) => {
@@ -209,7 +285,7 @@ app.get('/api/qr/:tableId', async (req, res) => {
   const tables = getTables();
   const table = tables.find((t) => t.id === req.params.tableId);
   if (!table) return res.status(404).json({ error: 'Table not found' });
-  const url = `${getBaseUrl(PORT)}/t/${table.id}`;
+  const url = `${getRelayConfig().url || getBaseUrl(PORT)}/t/${table.id}`;
   try {
     const svg = await QRCode.toString(url, {
       type: 'svg',
@@ -237,48 +313,12 @@ io.on('connection', (socket) => {
 
   socket.on('order:create', (payload, ack) => {
     try {
-      const tableId = payload?.tableId;
-      const items = Array.isArray(payload?.items) ? payload.items : [];
-      if (!tableId || items.length === 0) {
-        if (typeof ack === 'function') ack({ ok: false, error: 'Invalid order' });
-        return;
-      }
-      const table = getTables().find((t) => t.id === tableId);
-      if (!table) {
-        if (typeof ack === 'function') ack({ ok: false, error: 'Unknown table' });
-        return;
-      }
-      const menu = getMenu();
-      const normalized = items
-        .map((it) => {
-          const m = menu.find((x) => x.id === it.id);
-          if (!m || !m.available) return null;
-          const qty = Math.max(1, Math.min(99, Number(it.qty) || 1));
-          return {
-            id: m.id,
-            name: m.name,
-            price: m.price,
-            qty,
-            lineTotal: Math.round(m.price * qty * 100) / 100,
-          };
-        })
-        .filter(Boolean);
-      if (normalized.length === 0) {
-        if (typeof ack === 'function') ack({ ok: false, error: 'No valid items' });
-        return;
-      }
-      const total = Math.round(normalized.reduce((s, i) => s + i.lineTotal, 0) * 100) / 100;
-      const order = createOrder({
-        id: `o_${crypto.randomBytes(5).toString('hex')}`,
-        tableId,
-        items: normalized,
-        total,
-        note: String(payload?.note || '').slice(0, 200),
-      });
-      io.emit('order:new', order);
+      const requestId = /^q_[0-9a-f-]{36}$/.test(payload?.requestId || '') ? payload.requestId : undefined;
+      const { order, created } = acceptOrder(payload, requestId);
+      if (created) io.emit('order:new', order);
       if (typeof ack === 'function') ack({ ok: true, order });
-    } catch (err) {
-      if (typeof ack === 'function') ack({ ok: false, error: String(err.message || err) });
+    } catch (error) {
+      if (typeof ack === 'function') ack({ ok: false, error: error.message });
     }
   });
 
@@ -331,7 +371,7 @@ if (fs.existsSync(CLIENT_DIST)) {
 
 httpServer.listen(PORT, '0.0.0.0', () => {
   const lan = getLanIp();
-  console.log(`Kamil Hub listening on 0.0.0.0:${PORT}`);
+  console.log(`EzyCaf Hub listening on 0.0.0.0:${PORT}`);
   console.log(`  Local:  http://localhost:${PORT}`);
   console.log(`  LAN:    http://${lan}:${PORT}`);
 });

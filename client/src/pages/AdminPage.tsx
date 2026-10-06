@@ -25,7 +25,7 @@ const emptyForm = (): Partial<MenuItem> => ({
 });
 
 export default function AdminPage() {
-  const { hub, menu, connected } = useSocket();
+  const { hub, menu, connected, isDemo, refreshMenu } = useSocket();
   const [settings, setSettings] = useState<Settings | null>(null);
   const [name, setName] = useState('');
   const [accent, setAccent] = useState('#0F766E');
@@ -60,6 +60,15 @@ export default function AdminPage() {
     setTimeout(() => setMsg(null), 2500);
   }
 
+  useEffect(() => {
+    if (isDemo) return;
+    const timer = window.setInterval(() => {
+      fetch('/api/settings').then((r) => { if (!r.ok) throw new Error(); return r.json(); })
+        .then((s: Settings) => setSettings(s)).catch(() => {});
+    }, 10000);
+    return () => window.clearInterval(timer);
+  }, [isDemo]);
+
   async function saveSettings(partial?: Partial<Settings>) {
     setSaving(true);
     try {
@@ -76,6 +85,7 @@ export default function AdminPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
+      if (!res.ok) throw new Error('Settings were not saved');
       const s = await res.json();
       setSettings(s);
       flash('Settings saved');
@@ -112,6 +122,7 @@ export default function AdminPage() {
   }
 
   async function saveMenuItem() {
+    if (isDemo) { flash('Menu changes need the live cafe hub; demo has no database.'); return; }
     if (!form.name?.trim()) {
       flash('Name required');
       return;
@@ -126,14 +137,20 @@ export default function AdminPage() {
     };
     const url = editingId ? `/api/menu/${editingId}` : '/api/menu';
     const method = editingId ? 'PUT' : 'POST';
-    await fetch(url, {
-      method,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-    setForm(emptyForm());
-    setEditingId(null);
-    flash(editingId ? 'Item updated' : 'Item added');
+    try {
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Item could not be saved');
+      await refreshMenu();
+      setForm(emptyForm());
+      setEditingId(null);
+      flash(editingId ? 'Item updated' : 'Item added');
+    } catch (error) {
+      flash(error instanceof Error ? error.message : 'Save failed');
+    }
   }
 
   function editItem(item: MenuItem) {
@@ -142,13 +159,18 @@ export default function AdminPage() {
   }
 
   async function deleteItem(id: string) {
+    if (isDemo) { flash('Menu changes need the live cafe hub; demo has no database.'); return; }
     if (!confirm('Delete this menu item?')) return;
-    await fetch(`/api/menu/${id}`, { method: 'DELETE' });
-    if (editingId === id) {
-      setEditingId(null);
-      setForm(emptyForm());
+    try {
+      const res = await fetch(`/api/menu/${encodeURIComponent(id)}`, { method: 'DELETE' });
+      const result = await res.json().catch(() => ({}));
+      if (!res.ok || !result.ok) throw new Error(result.error || 'Delete failed. The item has not been removed.');
+      await refreshMenu();
+      if (editingId === id) { setEditingId(null); setForm(emptyForm()); }
+      flash(result.cloudSync === 'pending' ? 'Deleted locally. Cloud sync queued.' : 'Item deleted');
+    } catch (error) {
+      flash(error instanceof Error ? error.message : 'Delete failed');
     }
-    flash('Item deleted');
   }
 
   return (
@@ -161,6 +183,7 @@ export default function AdminPage() {
           </p>
         </div>
         <nav className="flex gap-2 text-sm">
+          <Link className="btn btn-ghost" to="/setup">Setup guide</Link>
           <Link className="btn btn-ghost" to="/">Hub</Link>
           <Link className="btn btn-ghost" to="/kitchen">Kitchen</Link>
           <Link className="btn btn-ghost" to="/cashier">Cashier</Link>
@@ -382,6 +405,7 @@ export default function AdminPage() {
             <span className="text-sm font-medium">Sync {supabaseSync ? 'On' : 'Off'}</span>
           </label>
           <p className="text-sm text-muted">
+            {settings?.syncError ? <span className="block text-red-700">Cloud sync pending: {settings.syncError}. Check the connection and database permissions.</span> : null}
             Last synced: <span className="text-ink">{formatSynced(settings?.lastSynced || '')}</span>
           </p>
           <button

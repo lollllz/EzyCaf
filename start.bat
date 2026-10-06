@@ -8,12 +8,12 @@ if errorlevel 1 (
 
 where node >nul 2>&1
 if errorlevel 1 (
-  echo ERROR: Node.js is not installed or is not on PATH. Install Node.js 18+ and retry.
+  echo ERROR: Node.js is not installed or is not on PATH. Install Node.js 22+ and retry.
   exit /b 1
 )
 where npm >nul 2>&1
 if errorlevel 1 (
-  echo ERROR: npm is not installed or is not on PATH. Install Node.js 18+ and retry.
+  echo ERROR: npm is not installed or is not on PATH. Install Node.js 22+ and retry.
   exit /b 1
 )
 
@@ -24,8 +24,8 @@ if not defined NODE_VERSION (
 )
 for /f "tokens=1 delims=." %%M in ("%NODE_VERSION%") do set "NODE_MAJOR=%%M"
 set /a NODE_MAJOR_NUM=%NODE_MAJOR% >nul 2>&1
-if %NODE_MAJOR_NUM% LSS 18 (
-  echo ERROR: Node.js 18 or newer is required; found %NODE_VERSION%.
+if %NODE_MAJOR_NUM% LSS 22 (
+  echo ERROR: Node.js 22 or newer is required; found %NODE_VERSION%.
   exit /b 1
 )
 
@@ -62,7 +62,7 @@ if defined SUPABASE_URL (
 
 if exist client\package.json (
   echo Building client...
-  call npm run build -w client
+  call npm run build
   if errorlevel 1 (
     echo ERROR: client build failed.
     exit /b 1

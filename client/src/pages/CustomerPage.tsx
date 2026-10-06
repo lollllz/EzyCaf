@@ -84,6 +84,7 @@ export default function CustomerPage() {
         </div>
       </header>
 
+      {hub?.networkMode === 'customer-relay' && hub.cafeOnline === false ? <p role="alert" className="bg-amber-50 p-4 text-amber-900">The cafe is offline. Please order with staff.</p> : null}
       <main className="mx-auto w-full max-w-2xl flex-1 overflow-y-auto px-4 py-6 space-y-8">
         {!table && hub ? (
           <div className="card p-6 text-center">
@@ -159,7 +160,7 @@ export default function CustomerPage() {
             type="button"
             className="btn btn-accent w-full text-base"
             style={{ height: 48 }}
-            disabled={lines.length === 0 || sending || !table}
+            disabled={lines.length === 0 || sending || !table || !connected || hub?.cafeOnline === false}
             onClick={send}
           >
             {sending ? 'Sending…' : 'Send to kitchen'}
@@ -168,7 +169,7 @@ export default function CustomerPage() {
       </div>
 
       {toast ? (
-        <div className="motion-toast fixed left-1/2 top-24 z-50 -translate-x-1/2 rounded-xl bg-ink px-4 py-3 text-sm font-medium text-white shadow-lg">
+        <div className="motion-toast fixed left-1/2 top-24 z-50 w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 rounded-xl bg-ink px-4 py-3 text-sm font-medium text-white shadow-lg">
           {toast}
         </div>
       ) : null}

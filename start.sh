@@ -5,16 +5,16 @@ cd "$(dirname "$0")"
 
 fail() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 
-command -v node >/dev/null 2>&1 || fail "Node.js is not installed or is not on PATH. Install Node.js 18+ and retry."
-command -v npm >/dev/null 2>&1 || fail "npm is not installed or is not on PATH. Install Node.js 18+ and retry."
+command -v node >/dev/null 2>&1 || fail "Node.js is not installed or is not on PATH. Install Node.js 22+ and retry."
+command -v npm >/dev/null 2>&1 || fail "npm is not installed or is not on PATH. Install Node.js 22+ and retry."
 
 NODE_VERSION="$(node -p 'process.versions.node' 2>/dev/null)" || fail "Unable to read the Node.js version."
 IFS=. read -r NODE_MAJOR _ <<EOF2
 $NODE_VERSION
 EOF2
 [[ "${NODE_MAJOR:-0}" =~ ^[0-9]+$ ]] || fail "Could not parse Node.js version: $NODE_VERSION"
-if (( NODE_MAJOR < 18 )); then
-  fail "Node.js 18 or newer is required; found $NODE_VERSION."
+if (( NODE_MAJOR < 22 )); then
+  fail "Node.js 22 or newer is required; found $NODE_VERSION."
 fi
 
 [[ -f package.json ]] || fail "package.json missing — run this from the Kamil repo root."
@@ -40,7 +40,7 @@ fi
 
 if [[ -f client/package.json ]]; then
   echo "Building client..."
-  npm run build -w client
+  npm run build
 else
   echo "Note: client/package.json not found yet — skipping client build."
 fi

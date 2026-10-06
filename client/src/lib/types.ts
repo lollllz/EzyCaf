@@ -45,6 +45,9 @@ export interface HubHello {
   tables: TableInfo[];
   baseUrl: string;
   brand: Brand;
+  customerUrl?: string;
+  networkMode?: string;
+  cafeOnline?: boolean;
 }
 
 export interface Settings {
@@ -55,6 +58,8 @@ export interface Settings {
   supabaseAnonKey: string;
   supabaseSync: boolean;
   lastSynced: string;
+  setupComplete: boolean;
+  syncError: string;
 }
 
 export interface CartItem {

@@ -1,0 +1,26 @@
+appId: com.ezycaf.hub
+productName: EzyCaf
+asar: true
+asarUnpack:
+  - node_modules/better-sqlite3/**
+files:
+  - desktop/**
+  - server/src/**
+  - server/package.json
+  - client/dist/**
+  - package.json
+  - '!server/data/**'
+  - '!uploads/**'
+directories:
+  output: release
+mac:
+  target: [dmg, zip]
+  category: public.app-category.business
+win:
+  target: [nsis]
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+linux:
+  target: [AppImage, deb]
+  category: Office

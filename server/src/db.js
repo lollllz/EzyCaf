@@ -4,7 +4,7 @@ import { fileURLToPath } from 'url';
 import fs from 'fs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const dataDir = path.join(__dirname, '..', 'data');
+const dataDir = process.env.EZYCAF_DATA_DIR || path.join(__dirname, '..', 'data');
 if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
 
 const dbPath = path.join(dataDir, 'kamil.db');
@@ -46,12 +46,16 @@ export function initDb() {
       updated_at TEXT NOT NULL,
       FOREIGN KEY (table_id) REFERENCES tables(id)
     );
+
+    CREATE TABLE IF NOT EXISTS menu_deletions (
+      id TEXT PRIMARY KEY
+    );
   `);
 
   const countSettings = db.prepare('SELECT COUNT(*) AS c FROM settings').get().c;
   if (countSettings === 0) {
     const set = db.prepare('INSERT INTO settings (key, value) VALUES (?, ?)');
-    set.run('name', 'Kamil');
+    set.run('name', 'EzyCaf');
     set.run('accent', '#0F766E');
     set.run('logoUrl', '');
     set.run('supabaseUrl', '');
@@ -71,8 +75,9 @@ export function initDb() {
     ].forEach(([id, label, order]) => insert.run(id, label, order));
   }
 
+  const seeded = db.prepare("SELECT value FROM settings WHERE key = 'menuSeeded'").get();
   const countMenu = db.prepare('SELECT COUNT(*) AS c FROM menu_items').get().c;
-  if (countMenu === 0) {
+  if (!seeded && countSettings === 0 && countMenu === 0) {
     const insert = db.prepare(
       'INSERT INTO menu_items (id, name, description, price, category, available, sort_order) VALUES (?, ?, ?, ?, ?, 1, ?)'
     );
@@ -88,6 +93,7 @@ export function initDb() {
     ];
     demo.forEach((row) => insert.run(...row));
   }
+  setSetting('menuSeeded', '1');
 
   return db;
 }
@@ -96,13 +102,15 @@ export function getSettings() {
   const rows = db.prepare('SELECT key, value FROM settings').all();
   const s = Object.fromEntries(rows.map((r) => [r.key, r.value]));
   return {
-    name: s.name || 'Kamil',
+    name: s.name || 'EzyCaf',
     accent: s.accent || '#0F766E',
     logoUrl: s.logoUrl || '',
     supabaseUrl: s.supabaseUrl || '',
     supabaseAnonKey: s.supabaseAnonKey || '',
     supabaseSync: s.supabaseSync === '1',
     lastSynced: s.lastSynced || '',
+    syncError: s.syncError || '',
+    setupComplete: s.setupComplete === '1',
   };
 }
 
@@ -156,7 +164,31 @@ export function upsertMenuItem(item) {
 }
 
 export function deleteMenuItem(id) {
-  db.prepare('DELETE FROM menu_items WHERE id = ?').run(id);
+  return db.transaction(() => {
+    const result = db.prepare('DELETE FROM menu_items WHERE id = ?').run(id);
+    if (result.changes) db.prepare('INSERT OR IGNORE INTO menu_deletions (id) VALUES (?)').run(id);
+    return result.changes > 0;
+  })();
+}
+
+export function getPendingMenuDeletions() {
+  return db.prepare('SELECT id FROM menu_deletions').all().map((row) => row.id);
+}
+
+export function acknowledgeMenuDeletions(ids) {
+  const remove = db.prepare('DELETE FROM menu_deletions WHERE id = ?');
+  db.transaction(() => ids.forEach((id) => remove.run(id)))();
+}
+
+export function completeSetup({ name, accent, tableCount }) {
+  db.transaction(() => {
+    setSetting('name', name);
+    setSetting('accent', accent);
+    const add = db.prepare('INSERT OR IGNORE INTO tables (id, label, sort_order) VALUES (?, ?, ?)');
+    for (let i = 1; i <= tableCount; i++) add.run(`t${i}`, `Table ${i}`, i);
+    // Never remove tables that might have order history.
+    setSetting('setupComplete', '1');
+  })();
 }
 
 export function createOrder({ id, tableId, items, total, note }) {
@@ -228,3 +260,8 @@ function mapOrder(row) {
 }
 
 export default db;
+
+export function getRelayConfig() {
+  const get = (key) => db.prepare('SELECT value FROM settings WHERE key = ?').get(key)?.value || '';
+  return { url: get('relayUrl'), token: get('relayToken'), lastSeen: get('relayLastSeen'), error: get('relayError') };
+}

@@ -1,0 +1,48 @@
+name: Build desktop installers and Android test APK
+on:
+  workflow_dispatch:
+  pull_request:
+    paths: ['desktop/**', 'android/**', 'server/**', 'client/**', 'relay/**', 'scripts/**', 'package*.json', 'electron-builder.yml', '.github/workflows/installers.yml']
+jobs:
+  desktop:
+    strategy:
+      matrix:
+        os: [macos-latest, windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run package:desktop -- --publish never
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: EzyCaf-${{ matrix.os }}-unsigned
+          path: |
+            release/*.dmg
+            release/*.zip
+            release/*.exe
+            release/*.AppImage
+            release/*.deb
+            client/dist/downloads/*.zip
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+      - run: chmod +x gradlew && ./gradlew assembleDebug lintDebug
+        working-directory: android
+      - uses: actions/upload-artifact@v4
+        with:
+          name: EzyCaf-Staff-test-apk
+          path: android/app/build/outputs/apk/debug/*.apk

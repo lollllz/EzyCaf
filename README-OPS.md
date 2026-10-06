@@ -7,7 +7,7 @@ Monorepo layout: root workspaces `server/` (Express + Socket.io + SQLite) and `c
 - macOS / Linux: `./start.sh`
 - Windows cmd: `start.bat`
 
-Scripts require Node 18+, run `npm install` when needed, build the client workspace, then start the Hub (`npm run start -w server`). Default port is **3847** (override with `PORT`).
+Scripts require Node 22+, run `npm install` when needed, build the client workspace, then start the Hub (`npm run start -w server`). Default port is **3847** (override with `PORT`).
 
 ## Environment
 
@@ -19,3 +19,5 @@ Scripts require Node 18+, run `npm install` when needed, build the client worksp
 `/` Hub QR board · `/t/:tableId` Customer · `/kitchen` KDS · `/cashier` · `/admin`
 
 For a stable QR destination, reserve the Hub device’s DHCP lease — see [`STATIC-IP.md`](STATIC-IP.md).
+
+Guided desktop, Android and customer-service setup: [README-SETUP.md](README-SETUP.md).
