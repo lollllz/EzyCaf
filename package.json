@@ -1,8 +1,8 @@
 {
-  "name": "kamil",
+  "name": "ezycaf",
   "version": "1.0.0",
   "private": true,
-  "description": "Local-network restaurant order management",
+  "description": "Cafe ordering and a guided local network hub",
   "workspaces": [
     "server",
     "client"
@@ -10,9 +10,32 @@
   "scripts": {
     "install:all": "npm install",
     "dev": "npm run start -w server",
-    "build": "npm run build -w client",
+    "build": "npm run build -w client && node scripts/make-deployment-bundle.mjs",
     "build:pages": "npm run build:pages -w client",
     "deploy:pages": "npm run build:pages && npx --yes gh-pages -d client/dist -b gh-pages",
-    "start": "npm run start -w server"
+    "start": "npm run start -w server",
+    "desktop": "npm run build && electron .",
+    "package:desktop": "npm run build && electron-builder",
+    "test": "node --test server/test/*.test.js",
+    "start:customer-service": "node relay/index.js"
+  },
+  "productName": "EzyCaf",
+  "main": "desktop/main.cjs",
+  "devDependencies": {
+    "archiver": "7.0.1",
+    "electron": "44.5.1",
+    "electron-builder": "26.15.3"
+  },
+  "dependencies": {
+    "better-sqlite3": "13.0.3",
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
+    "multer": "^1.4.5-lts.1",
+    "qrcode": "^1.5.4",
+    "socket.io": "^4.8.1"
+  },
+  "author": {
+    "name": "lollllz",
+    "email": "110182272+lollllz@users.noreply.github.com"
   }
 }

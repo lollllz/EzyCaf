@@ -93,7 +93,7 @@ export default function HubPage() {
         ) : (
           <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
             {hub.tables.map((t) => {
-              const publicUrl = tablePublicUrl(hub.baseUrl, t.id, hashMode);
+              const publicUrl = tablePublicUrl(hub.customerUrl || hub.baseUrl, t.id, hashMode);
               return (
                 <div key={t.id} className="flex flex-col items-center rounded-2xl border border-line bg-white p-6 shadow-sm">
                   {brand?.logoUrl ? (

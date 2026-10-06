@@ -1,0 +1,24 @@
+services:
+  customer:
+    build:
+      context: ..
+      dockerfile: relay/Dockerfile
+    restart: unless-stopped
+    environment:
+      RELAY_TOKEN: ${RELAY_TOKEN:?Set a unique pairing token}
+      RELAY_TRUST_PROXY: '1'
+    volumes:
+      - customer-data:/data
+  https:
+    image: caddy:2.10.2
+    restart: unless-stopped
+    ports: ['80:80', '443:443']
+    environment:
+      CUSTOMER_DOMAIN: ${CUSTOMER_DOMAIN:?Set your public domain}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - https-data:/data
+    depends_on: [customer]
+volumes:
+  customer-data:
+  https-data:

@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
+import { requestId } from '../lib/requestId';
 import { io, Socket } from 'socket.io-client';
 import type { HubHello, MenuItem, Order, OrderStatus } from '../lib/types';
 import {
   DEMO_MENU,
-  detectHubUnavailable,
   demoHubHello,
   isForceDemo,
   nextDemoOrderId,
@@ -43,11 +43,6 @@ async function ensureMode(): Promise<boolean> {
   if (demoInitPromise) return demoInitPromise;
   demoInitPromise = (async () => {
     if (isForceDemo()) {
-      enterDemoMode();
-      return true;
-    }
-    const unavailable = await detectHubUnavailable();
-    if (unavailable) {
       enterDemoMode();
       return true;
     }
@@ -300,11 +295,19 @@ export function useSocket() {
           resolve({ ok: false, error: 'Not connected' });
           return;
         }
-        s.emit(
+        const fingerprint = JSON.stringify({ tableId, items, note });
+        const key = `ezycaf-order-${tableId}`;
+        let intent: { fingerprint: string; id: string } | null = null;
+        try { intent = JSON.parse(sessionStorage.getItem(key) || 'null'); } catch {}
+        if (!intent || intent.fingerprint !== fingerprint) intent = { fingerprint, id: requestId() };
+        try { sessionStorage.setItem(key, JSON.stringify(intent)); } catch {}
+        s.timeout(15000).emit(
           'order:create',
-          { tableId, items, note },
-          (ack: { ok: boolean; order?: Order; error?: string }) => {
-            resolve(ack || { ok: false, error: 'No ack' });
+          { tableId, items, note, requestId: intent.id },
+          (error: Error | null, ack: { ok: boolean; order?: Order; error?: string }) => {
+            if (error) { resolve({ ok: false, error: 'Confirmation is delayed. Retry with the same cart or ask staff.' }); return; }
+            if (ack?.ok) { try { sessionStorage.removeItem(key); } catch {} }
+            resolve(ack || { ok: false, error: 'No acknowledgement' });
           }
         );
       });
@@ -350,7 +353,16 @@ export function useSocket() {
     });
   }, []);
 
+  const refreshMenu = useCallback(async () => {
+    if (demoMode) throw new Error('Menu changes need the live cafe hub. The demo has no database.');
+    const response = await fetch('/api/menu');
+    if (!response.ok) throw new Error('Could not refresh the cafe menu');
+    cachedMenu = await response.json();
+    notify();
+  }, []);
+
   return {
+    refreshMenu,
     socket: socketRef.current,
     connected,
     isDemo,

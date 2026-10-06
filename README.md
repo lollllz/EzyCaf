@@ -17,6 +17,10 @@ npm run build:pages          # VITE_DEMO=true, base /kamil/
 npx gh-pages -d client/dist  # or: npm run deploy:pages
 ```
 
+## Guided setup and installers
+
+See [README-SETUP.md](README-SETUP.md) for the desktop setup program, Android staff app, local-only ordering, and optional customer ordering over mobile data. The public customer service is owner-hosted and does not expose staff controls.
+
 ## Stack
 
 - **Server:** Node.js, Express, Socket.io, better-sqlite3, qrcode, multer
@@ -33,7 +37,7 @@ This installs dependencies, builds the SPA (demo **off**), and starts the Hub (A
 
 Printed URLs include localhost and your LAN IP, e.g. `http://192.168.1.10:3847`.
 
-Hub production has **no** demo banner — Socket.io + `/api` are used. Demo mode only activates when `VITE_DEMO=true` (Pages build) or when `/api/hub` is unreachable.
+Hub production has **no** demo banner — Socket.io + `/api` are used. Demo mode activates only when `VITE_DEMO=true` (Pages build). An unreachable live hub shows a connection state; it never silently substitutes simulated orders.
 
 ### Dev (optional)
 
@@ -51,6 +55,7 @@ npm run start -w server
 | `/t/:tableId` | Customer menu & cart → Send to kitchen |
 | `/kitchen` | Kitchen display (pending / cooking / ready) |
 | `/cashier` | Table cards, totals, Clear / Pay |
+| `/setup` | Guided cafe setup and optional customer-service pairing |
 | `/admin` | Accent, logo, menu CRUD, optional Supabase sync |
 
 (Pages demo uses HashRouter: `/#/`, `/#/t/t1`, etc.)

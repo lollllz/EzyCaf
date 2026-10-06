@@ -1,0 +1,10 @@
+.git
+node_modules
+**/node_modules
+release
+android
+**/data
+uploads
+.env
+**/.env
+*.log

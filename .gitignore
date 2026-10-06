@@ -11,3 +11,9 @@ uploads/
 *.log
 .DS_Store
 *.tsbuildinfo
+
+release/
+android/.gradle/
+android/**/build/
+android/local.properties
+*.keystore

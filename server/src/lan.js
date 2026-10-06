@@ -1,11 +1,12 @@
 import os from 'os';
+import { isPrivateIpv4 } from './network-access.js';
 
 export function getLanIp() {
   const ifaces = os.networkInterfaces();
   const candidates = [];
   for (const name of Object.keys(ifaces)) {
     for (const iface of ifaces[name] || []) {
-      if (iface.family === 'IPv4' && !iface.internal) {
+      if (iface.family === 'IPv4' && !iface.internal && isPrivateIpv4(iface.address) && !/^(utun|tun|tap|wg|tailscale|zt|ppp)/i.test(name)) {
         candidates.push({ name, address: iface.address });
       }
     }
