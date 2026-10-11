@@ -48,9 +48,11 @@ test('public customer orders reach the private hub once; staff operations are de
   await ready(`http://127.0.0.1:${hubPort}/api/health`);
   for(let i=0;i<50;i++){if((await(await fetch(publicBase+'/api/hub')).json()).cafeOnline)break;await new Promise(r=>setTimeout(r,100));}
   socket.connect();await connected(socket);
-  const payload={requestId:`q_${crypto.randomUUID()}`,tableId:'t1',items:[{id:'m1',qty:2,price:0.01}],note:'Test only'};
+  const payload={receiptToken:crypto.randomBytes(32).toString('hex'),requestId:`q_${crypto.randomUUID()}`,tableId:'t1',items:[{id:'m1',qty:2,price:0.01}],note:'Test only'};
   const accepted=await emit(socket,'order:create',payload);assert.equal(accepted.ok,true);
   assert.equal((await emit(socket,'order:create',payload)).ok,true);
+  assert.equal((await emit(socket,'order:create',{...payload,receiptToken:undefined})).ok,false);
+  assert.equal((await emit(socket,'order:create',{...payload,receiptToken:'0'.repeat(64)})).ok,false);
   const orders=JSON.parse(dbCommand(hubData,'console.log(JSON.stringify(store.getActiveOrders()))'));
   assert.equal(orders.length,1);assert.equal(orders[0].total,25);
   assert.equal((await emit(socket,'order:status',{orderId:orders[0].id,status:'paid'})).ok,false);
@@ -60,6 +62,26 @@ test('public customer orders reach the private hub once; staff operations are de
   assert.equal((await fetch(publicBase+'/admin')).status,404);
   assert.equal((await fetch(publicBase+'/api/menu',{method:'DELETE'})).status,403);
   const snapshot=await(await fetch(publicBase+'/api/hub')).json();assert.equal(snapshot.networkMode,'customer-relay');assert.equal(JSON.stringify(snapshot).includes(token),false);
+  const receiptPath=`/api/customer/orders/${accepted.orderId}`;
+  const receiptHeaders={'X-Order-Receipt':payload.receiptToken};
+  assert.equal((await fetch(publicBase+receiptPath)).status,404);
+  assert.equal((await fetch(publicBase+receiptPath,{headers:{'X-Order-Receipt':'0'.repeat(64)}})).status,404);
+  assert.equal((await (await fetch(publicBase+receiptPath,{headers:receiptHeaders})).json()).total,25);
+  const localBase=`http://127.0.0.1:${hubPort}`;
+  assert.equal((await fetch(localBase+receiptPath)).status,404);
+  assert.equal((await (await fetch(localBase+receiptPath,{headers:receiptHeaders})).json()).status,'pending');
+  for (const status of ['cooking','ready','served']) {
+    dbCommand(hubData,`store.updateOrderStatus('${accepted.orderId}','${status}')`);
+    for(let i=0;i<80;i++){const order=await(await fetch(publicBase+receiptPath,{headers:receiptHeaders})).json();if(order.status===status)break;await new Promise(r=>setTimeout(r,100));}
+    assert.equal((await(await fetch(publicBase+receiptPath,{headers:receiptHeaders})).json()).status,status);
+  }
+  assert.equal(JSON.parse(dbCommand(hubData,'console.log(JSON.stringify(store.getAllOrdersForCashier()))'))[0].status,'served');
+  dbCommand(hubData,"store.clearTable('t1')");
+  for(let i=0;i<80;i++){if((await(await fetch(publicBase+receiptPath,{headers:receiptHeaders})).json()).status==='paid')break;await new Promise(r=>setTimeout(r,100));}
+  assert.equal((await(await fetch(publicBase+receiptPath,{headers:receiptHeaders})).json()).status,'paid');
+  assert.deepEqual(JSON.parse(dbCommand(hubData,'console.log(JSON.stringify(store.getAllOrdersForCashier()))')),[]);
+  assert.equal(JSON.stringify(await(await fetch(publicBase+'/api/hub')).json()).includes(payload.receiptToken),false);
+  assert.match(await(await fetch(localBase+'/api/qr/t1')).text(), /<svg/);
   await stop(hub.child);
   await new Promise((r)=>setTimeout(r,15500));
   assert.equal((await emit(socket,'order:create',{...payload,requestId:`q_${crypto.randomUUID()}`})).ok,false);

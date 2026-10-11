@@ -1,4 +1,4 @@
-export type OrderStatus = 'pending' | 'cooking' | 'ready' | 'paid';
+export type OrderStatus = 'pending' | 'cooking' | 'ready' | 'served' | 'paid';
 
 export interface Brand {
   name: string;

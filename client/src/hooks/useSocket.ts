@@ -111,7 +111,7 @@ function demoSetStatus(
 ): { ok: boolean; order?: Order; error?: string } {
   const idx = cachedOrders.findIndex((o) => o.id === orderId);
   if (idx === -1) return { ok: false, error: 'Order not found' };
-  const allowed: OrderStatus[] = ['pending', 'cooking', 'ready', 'paid'];
+  const allowed: OrderStatus[] = ['pending', 'cooking', 'ready', 'served', 'paid'];
   if (!allowed.includes(status as OrderStatus)) {
     return { ok: false, error: 'Invalid status' };
   }
@@ -259,8 +259,7 @@ export function useSocket() {
         fetch('/api/orders/active')
           .then((r) => r.json())
           .then((data: Order[]) => {
-            cachedOrders = data;
-            setOrders(data);
+            if (Array.isArray(data)) { cachedOrders = data; setOrders(data); }
           })
           .catch(() => {});
       }
@@ -285,7 +284,7 @@ export function useSocket() {
 
   const createOrder = useCallback(
     (tableId: string, items: { id: string; qty: number }[], note?: string) => {
-      return new Promise<{ ok: boolean; order?: Order; error?: string }>((resolve) => {
+      return new Promise<{ ok: boolean; order?: Order; orderId?: string; receiptToken?: string; error?: string }>((resolve) => {
         if (demoMode) {
           resolve(demoCreateOrder(tableId, items, note));
           return;
@@ -297,17 +296,17 @@ export function useSocket() {
         }
         const fingerprint = JSON.stringify({ tableId, items, note });
         const key = `ezycaf-order-${tableId}`;
-        let intent: { fingerprint: string; id: string } | null = null;
+        let intent: { fingerprint: string; id: string; receiptToken: string } | null = null;
         try { intent = JSON.parse(sessionStorage.getItem(key) || 'null'); } catch {}
-        if (!intent || intent.fingerprint !== fingerprint) intent = { fingerprint, id: requestId() };
+        if (!intent || intent.fingerprint !== fingerprint) intent = { fingerprint, id: requestId(), receiptToken: Array.from(crypto.getRandomValues(new Uint8Array(32)),b=>b.toString(16).padStart(2,'0')).join('') };
         try { sessionStorage.setItem(key, JSON.stringify(intent)); } catch {}
         s.timeout(15000).emit(
           'order:create',
-          { tableId, items, note, requestId: intent.id },
+          { tableId, items, note, requestId: intent.id, receiptToken: intent.receiptToken },
           (error: Error | null, ack: { ok: boolean; order?: Order; error?: string }) => {
             if (error) { resolve({ ok: false, error: 'Confirmation is delayed. Retry with the same cart or ask staff.' }); return; }
             if (ack?.ok) { try { sessionStorage.removeItem(key); } catch {} }
-            resolve(ack || { ok: false, error: 'No acknowledgement' });
+            resolve(ack ? { ...ack, receiptToken: intent?.receiptToken } : { ok: false, error: 'No acknowledgement' });
           }
         );
       });
@@ -316,7 +315,7 @@ export function useSocket() {
   );
 
   const setStatus = useCallback((orderId: string, status: string) => {
-    return new Promise<{ ok: boolean; order?: Order; error?: string }>((resolve) => {
+    return new Promise<{ ok: boolean; order?: Order; orderId?: string; receiptToken?: string; error?: string }>((resolve) => {
       if (demoMode) {
         resolve(demoSetStatus(orderId, status));
         return;
@@ -326,11 +325,11 @@ export function useSocket() {
         resolve({ ok: false, error: 'Not connected' });
         return;
       }
-      s.emit(
+      s.timeout(10000).emit(
         'order:status',
         { orderId, status },
-        (ack: { ok: boolean; order?: Order; error?: string }) => {
-          resolve(ack || { ok: false, error: 'No ack' });
+        (error: Error | null, ack: { ok: boolean; order?: Order; error?: string }) => {
+          resolve(error ? { ok:false,error:'Could not confirm the update. Reconnect and check the order.' } : ack || { ok: false, error: 'No ack' });
         }
       );
     });
@@ -347,8 +346,8 @@ export function useSocket() {
         resolve({ ok: false, error: 'Not connected' });
         return;
       }
-      s.emit('table:clear', { tableId }, (ack: { ok: boolean; error?: string }) => {
-        resolve(ack || { ok: false, error: 'No ack' });
+      s.timeout(10000).emit('table:clear', { tableId }, (error: Error | null, ack: { ok: boolean; error?: string }) => {
+        resolve(error ? {ok:false,error:'Could not confirm payment. Reconnect and check the bill.'} : ack || { ok: false, error: 'No ack' });
       });
     });
   }, []);

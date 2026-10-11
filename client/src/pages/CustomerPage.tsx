@@ -1,6 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useSocket } from '../hooks/useSocket';
+import CustomerOrders, { type Receipt } from '../components/CustomerOrders';
 import QtyStepper from '../components/QtyStepper';
 import { money } from '../lib/format';
 import type { CartItem } from '../lib/types';
@@ -8,6 +9,9 @@ import type { CartItem } from '../lib/types';
 export default function CustomerPage() {
   const { tableId } = useParams<{ tableId: string }>();
   const { hub, menu, createOrder, connected } = useSocket();
+  const [view,setView] = useState<'menu'|'orders'>('menu');
+  const [receipts,setReceipts] = useState<Receipt[]>([]);
+  useEffect(()=>{try { const saved=JSON.parse(localStorage.getItem(`ezycaf-receipts-${tableId}`)||'[]');setReceipts(Array.isArray(saved)?saved:[]); } catch {setReceipts([]);} },[tableId]);
   const [cart, setCart] = useState<Record<string, CartItem>>({});
   const [note, setNote] = useState('');
   const [sending, setSending] = useState(false);
@@ -49,6 +53,13 @@ export default function CustomerPage() {
     );
     setSending(false);
     if (res.ok) {
+      const id = res.order?.id || res.orderId;
+      if (id && res.receiptToken) {
+        const next = [...receipts.filter(r=>r.id!==id), {id,token:res.receiptToken,order:res.order}].slice(-20);
+        setReceipts(next);
+        try {localStorage.setItem(`ezycaf-receipts-${tableId}`,JSON.stringify(next));} catch {}
+      }
+      setView('orders');
       setCart({});
       setNote('');
       setToast('Order sent to kitchen!');
@@ -82,6 +93,10 @@ export default function CustomerPage() {
             {connected ? 'Online' : '…'}
           </span>
         </div>
+        <nav className="mx-auto mt-4 flex max-w-2xl gap-2" aria-label="Customer sections">
+          <button className={`btn flex-1 ${view==='menu'?'btn-accent':'btn-ghost'}`} aria-pressed={view==='menu'} onClick={()=>setView('menu')}>Menu</button>
+          <button className={`btn flex-1 ${view==='orders'?'btn-accent':'btn-ghost'}`} aria-pressed={view==='orders'} onClick={()=>setView('orders')}>My orders {receipts.length ? `(${receipts.length})`:''}</button>
+        </nav>
       </header>
 
       {hub?.networkMode === 'customer-relay' && hub.cafeOnline === false ? <p role="alert" className="bg-amber-50 p-4 text-amber-900">The cafe is offline. Please order with staff.</p> : null}
@@ -93,8 +108,10 @@ export default function CustomerPage() {
           </div>
         ) : null}
 
-        {categories.map(([cat, items]) => (
-          <section key={cat}>
+        {view==='orders' ? <CustomerOrders receipts={receipts} connected={connected && hub?.cafeOnline!==false} /> : <>
+        <div className="rounded-2xl bg-white p-5"><h2 className="text-2xl font-bold">What sounds good?</h2><p className="mt-2 text-sm text-muted">Add items, check your cart and send your order. Follow its progress in My orders. Pay at the cashier.</p><nav className="mt-4 flex flex-wrap gap-2" aria-label="Menu categories">{categories.map(([cat],i)=><a key={cat} className="btn btn-ghost text-sm" href={`#category-${i}`}>{cat}</a>)}</nav></div>
+        {categories.map(([cat, items],index) => (
+          <section id={`category-${index}`} className="scroll-mt-44" key={cat}>
             <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-muted">{cat}</h2>
             <ul className="space-y-3">
               {items.map((item) => {
@@ -131,19 +148,22 @@ export default function CustomerPage() {
         ))}
 
         {menu.length === 0 ? (
-          <p className="text-center text-muted">Loading menu…</p>
+          <p className="text-center text-muted">{hub ? "No menu items available. Please ask staff." : "Loading menu…"}</p>
         ) : null}
+        </>}
       </main>
 
       {/* Bottom-docked cart — flex footer, not fixed (avoids mid-viewport on Pages) */}
       <div className="sticky bottom-0 z-30 shrink-0 border-t border-line bg-white/95 backdrop-blur shadow-[0_-8px_30px_rgba(0,0,0,0.06)] pb-[env(safe-area-inset-bottom)]">
         <div className="mx-auto max-w-2xl px-4 py-3 space-y-2">
+          {view==='orders' && lines.length===0 ? <button className="btn btn-accent w-full" onClick={()=>setView('menu')}>Add more items</button> : <>
           {lines.length > 0 ? (
-            <div className="motion-cart-expand space-y-2 overflow-hidden">
+            <div className="motion-tile space-y-2">
               <div className="flex items-center justify-between text-sm">
                 <span className="text-muted">{count} item{count === 1 ? '' : 's'}</span>
-                <span className="font-bold tabular-nums">{money(total)}</span>
+                <span key={count} className="motion-chip font-bold tabular-nums">{money(total)}</span>
               </div>
+              <ul className="max-h-32 overflow-auto text-sm">{lines.map(line=><li key={line.id} className="flex items-center justify-between gap-3 py-1"><span>{line.qty} × {line.name}</span><QtyStepper value={line.qty} onChange={qty=>setQty(line,qty)} min={0} /></li>)}</ul>
               <input
                 className="input text-sm"
                 placeholder="Note for kitchen (optional)"
@@ -165,11 +185,12 @@ export default function CustomerPage() {
           >
             {sending ? 'Sending…' : 'Send to kitchen'}
           </button>
+          </>}
         </div>
       </div>
 
       {toast ? (
-        <div className="motion-toast fixed left-1/2 top-24 z-50 w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 rounded-xl bg-ink px-4 py-3 text-sm font-medium text-white shadow-lg">
+        <div role="status" className="motion-toast fixed left-1/2 top-24 z-50 w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 rounded-xl bg-ink px-4 py-3 text-sm font-medium text-white shadow-lg">
           {toast}
         </div>
       ) : null}

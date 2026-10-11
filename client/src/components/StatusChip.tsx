@@ -4,6 +4,7 @@ const COLORS: Record<Exclude<OrderStatus, 'paid'>, string> = {
   pending: '#D97706',
   cooking: '#2563EB',
   ready: '#16A34A',
+  served: '#215C47',
 };
 
 export default function StatusChip({ status }: { status: OrderStatus }) {

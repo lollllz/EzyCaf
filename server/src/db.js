@@ -61,6 +61,8 @@ export function initDb() {
       FOREIGN KEY (table_id) REFERENCES tables(id)
     );
 
+    CREATE TABLE IF NOT EXISTS customer_receipts (order_id TEXT PRIMARY KEY, token TEXT NOT NULL);
+
     CREATE TABLE IF NOT EXISTS menu_deletions (
       id TEXT PRIMARY KEY
     );
@@ -205,12 +207,15 @@ export function completeSetup({ name, accent, tableCount }) {
   })();
 }
 
-export function createOrder({ id, tableId, items, total, note }) {
+export function createOrder({ id, tableId, items, total, note, receiptToken }) {
   const now = new Date().toISOString();
-  db.prepare(
+  db.transaction(() => {
+    db.prepare(
     `INSERT INTO orders (id, table_id, status, items_json, total, note, created_at, updated_at)
      VALUES (?, ?, 'pending', ?, ?, ?, ?, ?)`
   ).run(id, tableId, JSON.stringify(items), total, note || '', now, now);
+  if (receiptToken) db.prepare('INSERT INTO customer_receipts VALUES (?,?)').run(id, receiptToken);
+  })();
   return getOrder(id);
 }
 
@@ -229,7 +234,7 @@ export function updateOrderStatus(id, status) {
 export function getActiveOrders() {
   return db
     .prepare(
-      `SELECT * FROM orders WHERE status IN ('pending','cooking','ready') ORDER BY created_at ASC`
+      `SELECT * FROM orders WHERE status IN ('pending','cooking','ready','served') ORDER BY created_at ASC`
     )
     .all()
     .map(mapOrder);
@@ -238,7 +243,7 @@ export function getActiveOrders() {
 export function getOrdersByTable(tableId) {
   return db
     .prepare(
-      `SELECT * FROM orders WHERE table_id = ? AND status IN ('pending','cooking','ready') ORDER BY created_at ASC`
+      `SELECT * FROM orders WHERE table_id = ? AND status IN ('pending','cooking','ready','served') ORDER BY created_at ASC`
     )
     .all()
     .map(mapOrder);
@@ -247,14 +252,14 @@ export function getOrdersByTable(tableId) {
 export function clearTable(tableId) {
   const now = new Date().toISOString();
   db.prepare(
-    `UPDATE orders SET status = 'paid', updated_at = ? WHERE table_id = ? AND status IN ('pending','cooking','ready')`
+    `UPDATE orders SET status = 'paid', updated_at = ? WHERE table_id = ? AND status IN ('pending','cooking','ready','served')`
   ).run(now, tableId);
 }
 
 export function getAllOrdersForCashier() {
   return db
     .prepare(
-      `SELECT * FROM orders WHERE status IN ('pending','cooking','ready') ORDER BY table_id, created_at`
+      `SELECT * FROM orders WHERE status IN ('pending','cooking','ready','served') ORDER BY table_id, created_at`
     )
     .all()
     .map(mapOrder);
@@ -278,4 +283,18 @@ export default db;
 export function getRelayConfig() {
   const get = (key) => db.prepare('SELECT value FROM settings WHERE key = ?').get(key)?.value || '';
   return { url: get('relayUrl'), token: get('relayToken'), lastSeen: get('relayLastSeen'), error: get('relayError') };
+}
+
+export function getCustomerOrder(id, token) {
+  if (!/^[0-9a-f]{64}$/.test(token || '')) return null;
+  const receipt = db.prepare('SELECT order_id FROM customer_receipts WHERE order_id=? AND token=?').get(id, token);
+  return receipt ? getOrder(id) : null;
+}
+export function getRelayReceipts() {
+  return db.prepare('SELECT r.order_id, r.token FROM customer_receipts r JOIN orders o ON o.id=r.order_id WHERE o.updated_at >= ?').all(new Date(Date.now()-86400000).toISOString()).map(r => ({ token:r.token, order:getOrder(r.order_id) }));
+}
+
+export function matchesOrderReceipt(id, token) {
+  const receipt = db.prepare('SELECT token FROM customer_receipts WHERE order_id=?').get(id);
+  return !receipt || receipt.token === token;
 }

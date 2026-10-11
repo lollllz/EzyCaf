@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useSocket } from '../hooks/useSocket';
 import StatusChip from '../components/StatusChip';
@@ -7,12 +8,15 @@ import type { Order, OrderStatus } from '../lib/types';
 const NEXT: Partial<Record<OrderStatus, OrderStatus>> = {
   pending: 'cooking',
   cooking: 'ready',
+  ready: 'served',
 };
 
 export default function KitchenPage() {
   const { hub, orders, setStatus, connected } = useSocket();
+  const [busy,setBusy]=useState<string|null>(null);
+  const [error,setError]=useState('');
 
-  const active = orders.filter((o) => o.status !== 'paid');
+  const active = orders.filter((o) => ['pending','cooking','ready'].includes(o.status));
   const byStatus = {
     pending: active.filter((o) => o.status === 'pending'),
     cooking: active.filter((o) => o.status === 'cooking'),
@@ -25,7 +29,11 @@ export default function KitchenPage() {
 
   async function bump(order: Order) {
     const next = NEXT[order.status];
-    if (next) await setStatus(order.id, next);
+    if (!next || busy) return;
+    setBusy(order.id);setError('');
+    const result=await setStatus(order.id,next);
+    if (!result.ok) setError(result.error || 'Could not update order');
+    setBusy(null);
   }
 
   return (
@@ -43,6 +51,7 @@ export default function KitchenPage() {
         </nav>
       </header>
 
+      {error ? <p role="alert" className="p-4 text-amber-200">{error}</p>:null}
       <main className="grid gap-4 p-4 lg:grid-cols-3">
         {(['pending', 'cooking', 'ready'] as const).map((col) => (
           <section key={col} className="min-h-[40vh]">
@@ -90,9 +99,10 @@ export default function KitchenPage() {
                               ? '#16A34A'
                               : '#374151',
                       }}
+                      disabled={!connected || busy!==null}
                       onClick={() => bump(order)}
                     >
-                      {order.status === 'pending' ? 'Start cooking' : 'Mark ready'}
+                      {order.status === 'pending' ? 'Start cooking' : order.status === 'cooking' ? 'Mark ready' : 'Served · remove ticket'}
                     </button>
                   ) : (
                     <p className="mt-4 text-center text-sm font-medium text-status-ready">
