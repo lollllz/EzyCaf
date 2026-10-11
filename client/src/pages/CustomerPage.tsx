@@ -72,7 +72,7 @@ export default function CustomerPage() {
           ) : null}
           <div className="min-w-0 flex-1">
             <p className="text-xs font-medium uppercase tracking-wide text-muted">
-              {brand?.name || 'Kamil'}
+              {brand?.name || 'EzyCaf'}
             </p>
             <h1 className="truncate text-xl font-bold">
               {table?.label || `Table ${tableId}`}
