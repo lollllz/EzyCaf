@@ -34,7 +34,7 @@ export default function KitchenPage() {
         <div>
           <h1 className="text-xl font-bold tracking-tight">Kitchen Display</h1>
           <p className="text-sm text-white/50">
-            {hub?.brand?.name || 'Kamil'} · {connected ? 'Live' : 'Reconnecting…'}
+            {hub?.brand?.name || 'EzyCaf'} · {connected ? 'Live' : 'Reconnecting…'}
           </p>
         </div>
         <nav className="flex gap-2 text-sm">

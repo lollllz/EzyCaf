@@ -1,6 +1,6 @@
-# Static LAN IP for Kamil Hub
+# Static LAN IP for EzyCaf Hub
 
-> **Assumption:** Kamil Hub runs on one device on the same private Wi-Fi/LAN as the phones and tablets. The router UI differs by brand, but the steps below are generic.
+> **Assumption:** EzyCaf Hub runs on one device on the same private Wi-Fi/LAN as the phones and tablets. The router UI differs by brand, but the steps below are generic.
 
 A stable IP keeps printed table QR codes working. If the router gives the Hub a new DHCP address after a reboot, QR links containing the old address stop working.
 

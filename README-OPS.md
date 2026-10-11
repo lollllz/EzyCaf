@@ -1,4 +1,4 @@
-# Kamil Hub — start & LAN notes
+# EzyCaf Hub — start & LAN notes
 
 Monorepo layout: root workspaces `server/` (Express + Socket.io + SQLite) and `client/` (React + Tailwind SPA). Runtime dirs: `data/` (SQLite), `uploads/` (logo, Hub-local only).
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Kamil Hub one-click start — workspaces: server/ + client/
+# EzyCaf Hub one-click start — workspaces: server/ + client/
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -17,9 +17,9 @@ if (( NODE_MAJOR < 22 )); then
   fail "Node.js 22 or newer is required; found $NODE_VERSION."
 fi
 
-[[ -f package.json ]] || fail "package.json missing — run this from the Kamil repo root."
+[[ -f package.json ]] || fail "package.json missing — run this from the EzyCaf repo root."
 
-echo "=== Kamil — Restaurant Order Management ==="
+echo "=== EzyCaf — Restaurant Order Management ==="
 echo "Node.js $NODE_VERSION"
 echo ""
 
@@ -62,7 +62,7 @@ fi
 LAN_IP="${LAN_IP:-localhost}"
 
 echo ""
-echo "Starting Kamil Hub on port ${PORT}..."
+echo "Starting EzyCaf Hub on port ${PORT}..."
 echo "  Local:   http://localhost:${PORT}"
 echo "  LAN:     http://${LAN_IP}:${PORT}"
 echo "  Hub:     http://${LAN_IP}:${PORT}/"

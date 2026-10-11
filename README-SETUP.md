@@ -4,7 +4,7 @@
 
 The desktop application runs the hub and opens guided setup. Packaging targets are macOS DMG/ZIP, Windows installer and Linux AppImage/DEB. Pre-release builds are unsigned; distribution requires the owner's signing credentials (including macOS notarization). Closing the application stops the hub. Keep the host on throughout service.
 
-New desktop installs keep their database and uploaded logos in the operating system's EzyCaf application-data folder, not inside the installer. Updating the application preserves this data. Existing source installs continue to use `server/data/kamil.db`. To migrate an existing source database, stop both hubs, back up the database and its SQLite sidecars, and move it to the desktop `hub-data` folder as `kamil.db`. Copy the uploads folder too. The desktop app uses a separate database until migrated; it does not silently overwrite or import existing data.
+New desktop installs keep their database and uploaded logos in the operating system's EzyCaf application-data folder, not inside the installer. Updating the application preserves this data. Existing source installs continue to use `server/data/ezycaf.db`. To migrate an existing source database, stop both hubs, back up the database and its SQLite sidecars, and move it to the desktop `hub-data` folder as `ezycaf.db`. Copy the uploads folder too. The desktop app uses a separate database until migrated; it does not silently overwrite or import existing data.
 
 Developers can run `npm ci` then `npm run desktop`. For Node hub use `start.sh` (macOS/Linux) or `start.bat` (Windows), then visit `http://localhost:3847/setup`. Node setup requires Node 22+. The packaged desktop application includes its runtime and does not require installing Node.
 

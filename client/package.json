@@ -6,9 +6,9 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "build:pages": "tsc -b && VITE_DEMO=true VITE_BASE=/kamil/ vite build --mode pages",
+    "build:pages": "tsc -b && VITE_DEMO=true VITE_BASE=/EzyCaf/ vite build --mode pages",
     "preview": "vite preview",
-    "preview:pages": "vite preview --base /kamil/"
+    "preview:pages": "vite preview --base /EzyCaf/"
   },
   "dependencies": {
     "qrcode": "^1.5.4",

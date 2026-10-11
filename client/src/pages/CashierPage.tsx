@@ -23,7 +23,7 @@ export default function CashierPage() {
         <div>
           <h1 className="text-xl font-bold">Cashier</h1>
           <p className="text-sm text-muted">
-            {hub?.brand?.name || 'Kamil'} · {connected ? 'Live' : '…'}
+            {hub?.brand?.name || 'EzyCaf'} · {connected ? 'Live' : '…'}
           </p>
         </div>
         <nav className="flex gap-2 text-sm">
