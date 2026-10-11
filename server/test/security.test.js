@@ -14,10 +14,12 @@ async function connect(socket) { await new Promise((resolve,reject) => { socket.
 test('guest isolation, staff authentication, receipt privacy, uploads, origin guards and abuse limits', async t => {
   const dir = await mkdtemp(path.join(os.tmpdir(), 'ezycaf-security-'));
   const probe = net.createServer(); await new Promise(r => probe.listen(0, '127.0.0.1', r)); const port = probe.address().port; await new Promise(r => probe.close(r));
-  const child = spawn(process.execPath, ['server/src/index.js'], { cwd: root, env: { ...process.env, PORT: String(port), EZYCAF_DATA_DIR: dir, EZYCAF_UPLOAD_DIR: path.join(dir,'uploads') }, stdio: 'ignore' });
+  const child = spawn(process.execPath, ['server/src/index.js'], { cwd: root, env: { ...process.env, PORT: String(port), EZYCAF_DATA_DIR: dir, EZYCAF_UPLOAD_DIR: path.join(dir,'uploads') }, stdio: ['ignore', 'ignore', 'pipe'] });
+  let startupErrors = ''; child.stderr.on('data', chunk => { startupErrors += chunk; });
   const sockets = []; t.after(async () => { sockets.forEach(s => s.disconnect()); const done = new Promise(r => child.once('exit',r)); child.kill(); await done; await rm(dir,{recursive:true,force:true}); });
   const base = `http://127.0.0.1:${port}`;
   for (let i=0;i<100;i++) { try { if((await fetch(base+'/api/health')).ok) break; } catch {} await new Promise(r=>setTimeout(r,100)); }
+  assert.equal(child.exitCode, null, startupErrors);
   for (const route of ['/api/settings','/api/orders','/api/orders/active','/api/orders/table/t1','/api/setup']) assert.equal((await fetch(base+route)).status,401,route);
   for (const [route,method] of [['/api/menu','POST'],['/api/menu/m1','DELETE'],['/api/settings','PUT'],['/api/settings/logo','POST'],['/api/setup','POST']]) assert.equal((await fetch(base+route,{method,headers:{'Content-Type':'application/json'},body:method==='DELETE'?undefined:'{}'})).status,401,route);
   assert.equal((await fetch(base+'/api/menu',{headers:{Origin:'https://untrusted.example'}})).status,403);

@@ -12,7 +12,7 @@ if (process.platform === 'win32') {
   const identity = execFileSync('whoami', ['/user', '/fo', 'csv', '/nh'], { encoding: 'utf8', windowsHide: true });
   const sid = identity.match(/S-1-\d+(?:-\d+)+/)?.[0];
   if (!sid) throw new Error('Cannot determine the staff-code file owner.');
-  execFileSync('icacls', [codeFile, '/inheritance:r', '/grant:r', `${sid}:F`], { stdio: 'ignore', windowsHide: true });
+  execFileSync('icacls', [codeFile, '/inheritance:r', '/grant:r', `*${sid}:F`], { stdio: 'ignore', windowsHide: true });
 } else fs.chmodSync(codeFile, 0o600);
 export function getStaffAccessCode() { return fs.readFileSync(codeFile, 'utf8').trim(); }
 const expected = crypto.createHash('sha256').update(fs.readFileSync(codeFile, 'utf8').trim()).digest();
