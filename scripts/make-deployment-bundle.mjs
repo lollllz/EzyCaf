@@ -7,7 +7,7 @@ const output = fs.createWriteStream(path.join(target, 'EzyCaf-customer-service.z
 const archive = archiver('zip', { zlib: { level: 9 } });
 const complete = new Promise((resolve, reject) => { output.on('close', resolve); output.on('error', reject); archive.on('error', reject); });
 archive.pipe(output);
-for (const file of ['package.json', 'package-lock.json', 'server/package.json', 'client/package.json', 'relay/index.js', 'relay/package.json', 'relay/compose.yaml', 'relay/Caddyfile', 'relay/.env.example', 'relay/DEPLOYMENT.md']) archive.file(file, { name: file });
+for (const file of ['package.json', 'package-lock.json', 'server/package.json', 'client/package.json', 'relay/index.js', 'relay/security-headers.js', 'relay/package.json', 'relay/compose.yaml', 'relay/Caddyfile', 'relay/.env.example', 'relay/DEPLOYMENT.md']) archive.file(file, { name: file });
 archive.directory('client/dist/assets', 'client/dist/assets');
 archive.file('client/dist/index.html', { name: 'client/dist/index.html' });
 archive.append(`FROM node:22-bookworm-slim

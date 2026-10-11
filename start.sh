@@ -47,6 +47,7 @@ fi
 
 PORT="${PORT:-3847}"
 export PORT
+export EZYCAF_SHOW_STAFF_CODE=1
 export NODE_ENV="${NODE_ENV:-production}"
 
 LAN_IP=$(hostname -I 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i !~ /^127\./ && $i !~ /:/){print $i; exit}}' || true)

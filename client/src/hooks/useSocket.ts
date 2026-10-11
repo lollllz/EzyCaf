@@ -174,7 +174,7 @@ export function useSocket() {
       socketRef.current = s;
       if (!s) return;
 
-      const onConnect = () => setConnected(true);
+      const onConnect = () => { setConnected(true); cachedOrders = []; setOrders([]); };
       const onDisconnect = () => setConnected(false);
       const onHello = (data: HubHello) => {
         cachedHub = data;

@@ -8,6 +8,12 @@ New desktop installs keep their database and uploaded logos in the operating sys
 
 Developers can run `npm ci` then `npm run desktop`. For Node hub use `start.sh` (macOS/Linux) or `start.bat` (Windows), then visit `http://localhost:3847/setup`. Node setup requires Node 22+. The packaged desktop application includes its runtime and does not require installing Node.
 
+## Staff sign-in
+
+Hub, kitchen, cashier, admin and setup require a staff access code as well as the cafe network. Customers can browse, order and track their own receipts without this code. Start scripts print the code in the host Terminal. In the desktop application, choose **EzyCaf → Staff access code**. Source installs store it in `server/data/staff-access.txt`; desktop installs store it in the `hub-data` folder. Keep it private. The file is restricted to its owner on macOS/Linux and by owner ACL on Windows. Sessions expire after eight hours; logout and server restart invalidate sessions. All staff share one code in this version.
+
+The local hub still uses HTTP, which does not encrypt codes or session traffic. Use trusted networks for evaluation. For real service, configure HTTPS on the local staff network, separate guest and staff networks, and keep the staff hub off the public internet. Application authentication and rate limits do not prevent network interception or network flooding.
+
 ## Guided setup
 
 1. Understand the cafe's local-network requirements.
@@ -24,7 +30,7 @@ Reprint QR codes when switching modes or changing addresses. Keep local fallback
 
 ## Android staff app
 
-Install the test APK, join cafe Wi-Fi, then enter the private IPv4 address displayed by the hub. Test the connection and choose Table hub, Kitchen or Cashier. The app validates the hub and refuses cellular/VPN connections and public URLs. Leaving Wi-Fi blanks the staff screen; it must reconnect before resuming. Setup/admin remains on the host computer. The role chooser is navigation, not a staff authorization/login system; the existing hub trusts devices on its cafe network. Separate staff and guest networks with router rules if guests must not reach staff endpoints.
+Install the test APK, join cafe Wi-Fi, then enter the private IPv4 address displayed by the hub. Test the connection and choose Table hub, Kitchen or Cashier. The app validates the hub and refuses cellular/VPN connections and public URLs. Leaving Wi-Fi blanks the staff screen; it must reconnect before resuming. Setup/admin remains on the host computer. The role chooser selects a view. Enter the staff code on its sign-in screen; choosing a role does not grant access. Separate staff and guest networks with router rules.
 
 Customers do not need an APK; a browser opens the table QR.
 

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -8,9 +8,17 @@ import { spawn, execFileSync } from 'node:child_process';
 import net from 'node:net';
 import crypto from 'node:crypto';
 import { io } from 'socket.io-client';
+const nativeFetch = globalThis.fetch;
+const staffCookies = new Map();
+function fetch(url, options = {}) { const cookie = staffCookies.get(new URL(url).origin); return nativeFetch(url, { ...options, headers: { ...(cookie ? { Cookie: cookie } : {}), ...options.headers } }); }
+async function login(base, data) {
+  const code = (await readFile(path.join(data, 'staff-access.txt'), 'utf8')).trim();
+  const response = await nativeFetch(base + '/api/staff/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code }) });
+  assert.equal(response.status, 200); staffCookies.set(base, response.headers.get('set-cookie').split(';')[0]);
+}
 const root = fileURLToPath(new URL('../..', import.meta.url));
 async function freePort() { const server = net.createServer(); await new Promise((r) => server.listen(0, '127.0.0.1', r)); const port = server.address().port; await new Promise((r) => server.close(r)); return port; }
-async function ready(url, headers) { for (let i=0;i<150;i++) { try { const r=await fetch(url, { headers }); if(r.ok) return; } catch {} await new Promise((r)=>setTimeout(r,100)); } throw new Error(`Service did not become ready: ${url}`); }
+async function ready(url, headers, service) { for (let i=0;i<150;i++) { try { const r=await fetch(url, { headers }); if(r.ok) return; } catch {} await new Promise((r)=>setTimeout(r,100)); } throw new Error(`Service did not become ready: ${url}. ${service?.errors() || ''}`); }
 function start(script, env) { const child=spawn(process.execPath,[script],{ cwd:root, env:{...process.env,...env}, stdio:['ignore','ignore','pipe'] }); let errors=''; child.stderr.on('data',(s)=>{errors+=s;}); child.on('error',()=>{}); return { child, errors:()=>errors }; }
 async function stop(child) { if(child.exitCode!==null || child.signalCode!==null) return; const done=new Promise((r)=>child.once('exit',r)); child.kill(); await done; }
 function dbCommand(dir, source, extraEnv = {}) { return execFileSync(process.execPath,['--input-type=module','-e',`import db, * as store from './server/src/db.js'; store.initDb(); ${source}; db.close();`],{cwd:root,env:{...process.env,EZYCAF_DATA_DIR:dir,...extraEnv},encoding:'utf8'}); }
@@ -21,14 +29,14 @@ test('menu delete persists in SQLite, responds correctly, and stays empty on res
   const data=await mkdtemp(path.join(tmpdir(),'ezycaf-delete-')); const port=await freePort(); let hub;
   t.after(async()=>{if(hub) await stop(hub.child); await rm(data,{recursive:true,force:true});});
   const env={PORT:String(port),EZYCAF_DATA_DIR:data,EZYCAF_UPLOAD_DIR:path.join(data,'uploads')};
-  hub=start('server/src/index.js',env); const base=`http://127.0.0.1:${port}`; await ready(base+'/api/health');
+  hub=start('server/src/index.js',env); const base=`http://127.0.0.1:${port}`; await ready(base+'/api/health', undefined, hub); await login(base, data);
   const added=await (await fetch(base+'/api/menu',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:'Delete regression',price:5})})).json();
   assert.equal((await fetch(`${base}/api/menu/${added.id}`,{method:'DELETE'})).status,200);
   assert.equal((await fetch(`${base}/api/menu/${added.id}`,{method:'DELETE'})).status,404);
   assert.equal(JSON.parse(dbCommand(data,`console.log(JSON.stringify(store.getMenu()))`)).some(m=>m.id===added.id),false);
   const menu=await (await fetch(base+'/api/menu')).json(); for(const item of menu) await fetch(`${base}/api/menu/${item.id}`,{method:'DELETE'});
   assert.deepEqual(await (await fetch(base+'/api/menu')).json(),[]);
-  await stop(hub.child); hub=start('server/src/index.js',env); await ready(base+'/api/health');
+  await stop(hub.child); hub=start('server/src/index.js',env); await ready(base+'/api/health', undefined, hub); await login(base, data);
   assert.deepEqual(await (await fetch(base+'/api/menu')).json(),[]);
   assert.equal(JSON.parse(dbCommand(data,'console.log(JSON.stringify(store.getPendingMenuDeletions()))')).includes(added.id),true);
   const blocked=await fetch(base+'/api/menu',{method:'POST',headers:{Origin:'https://untrusted.example','Content-Type':'application/json'},body:'{}'}); assert.equal(blocked.status,403);
@@ -45,7 +53,7 @@ test('public customer orders reach the private hub once; staff operations are de
   const hub=start('server/src/index.js',{PORT:String(hubPort),EZYCAF_DATA_DIR:hubData,EZYCAF_UPLOAD_DIR:path.join(data,'uploads')});
   const socket=io(publicBase,{autoConnect:false,transports:['websocket']});
   t.after(async()=>{socket.disconnect();await stop(hub.child);await stop(relay.child);await rm(data,{recursive:true,force:true});});
-  await ready(`http://127.0.0.1:${hubPort}/api/health`);
+  await ready(`http://127.0.0.1:${hubPort}/api/health`, undefined, hub);
   for(let i=0;i<50;i++){if((await(await fetch(publicBase+'/api/hub')).json()).cafeOnline)break;await new Promise(r=>setTimeout(r,100));}
   socket.connect();await connected(socket);
   const payload={receiptToken:crypto.randomBytes(32).toString('hex'),requestId:`q_${crypto.randomUUID()}`,tableId:'t1',items:[{id:'m1',qty:2,price:0.01}],note:'Test only'};

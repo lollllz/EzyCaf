@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import { getMenu, getTables, getOrder, createOrder, matchesOrderReceipt } from './db.js';
 
 export function acceptOrder(payload, id = `o_${crypto.randomBytes(8).toString('hex')}`) {
+  if (!/^[0-9a-f]{64}$/.test(payload?.receiptToken || '')) throw new Error('Invalid order receipt');
   const prior = getOrder(id);
   if (prior) {
     if (!matchesOrderReceipt(id, payload.receiptToken)) throw new Error('Invalid order receipt');
