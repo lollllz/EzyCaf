@@ -279,3 +279,8 @@ export function getCustomerOrder(id, token) {
 export function getRelayReceipts() {
   return db.prepare('SELECT r.order_id, r.token FROM customer_receipts r JOIN orders o ON o.id=r.order_id WHERE o.updated_at >= ?').all(new Date(Date.now()-86400000).toISOString()).map(r => ({ token:r.token, order:getOrder(r.order_id) }));
 }
+
+export function matchesOrderReceipt(id, token) {
+  const receipt = db.prepare('SELECT token FROM customer_receipts WHERE order_id=?').get(id);
+  return !receipt || receipt.token === token;
+}

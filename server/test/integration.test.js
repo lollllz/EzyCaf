@@ -51,6 +51,8 @@ test('public customer orders reach the private hub once; staff operations are de
   const payload={receiptToken:crypto.randomBytes(32).toString('hex'),requestId:`q_${crypto.randomUUID()}`,tableId:'t1',items:[{id:'m1',qty:2,price:0.01}],note:'Test only'};
   const accepted=await emit(socket,'order:create',payload);assert.equal(accepted.ok,true);
   assert.equal((await emit(socket,'order:create',payload)).ok,true);
+  assert.equal((await emit(socket,'order:create',{...payload,receiptToken:undefined})).ok,false);
+  assert.equal((await emit(socket,'order:create',{...payload,receiptToken:'0'.repeat(64)})).ok,false);
   const orders=JSON.parse(dbCommand(hubData,'console.log(JSON.stringify(store.getActiveOrders()))'));
   assert.equal(orders.length,1);assert.equal(orders[0].total,25);
   assert.equal((await emit(socket,'order:status',{orderId:orders[0].id,status:'paid'})).ok,false);

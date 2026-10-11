@@ -1,10 +1,10 @@
 import crypto from 'node:crypto';
-import { getMenu, getTables, getOrder, createOrder, getCustomerOrder } from './db.js';
+import { getMenu, getTables, getOrder, createOrder, matchesOrderReceipt } from './db.js';
 
 export function acceptOrder(payload, id = `o_${crypto.randomBytes(8).toString('hex')}`) {
   const prior = getOrder(id);
   if (prior) {
-    if (payload.receiptToken && !getCustomerOrder(id, payload.receiptToken)) throw new Error('Invalid order receipt');
+    if (!matchesOrderReceipt(id, payload.receiptToken)) throw new Error('Invalid order receipt');
     return { order: prior, created: false };
   }
   if (payload.receiptToken && !/^[0-9a-f]{64}$/.test(payload.receiptToken)) throw new Error('Invalid order receipt');

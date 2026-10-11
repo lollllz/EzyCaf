@@ -84,6 +84,7 @@ io.on('connection', (socket) => {
     const id = payload?.requestId;
     if (typeof id !== 'string' || !/^q_[0-9a-f-]{36}$/.test(id)) return ack({ ok: false, error: 'Invalid order reference' });
     const existing = db.prepare('SELECT * FROM requests WHERE id=?').get(id);
+    if (existing && JSON.parse(existing.payload).receiptToken && JSON.parse(existing.payload).receiptToken !== payload.receiptToken) return ack({ok:false,error:'Invalid order receipt'});
     if (existing?.result) return ack(JSON.parse(existing.result));
     if (!existing) {
       if (!allowOrder(process.env.RELAY_TRUST_PROXY === '1' ? String(socket.handshake.headers['x-forwarded-for'] || socket.handshake.address).split(',').pop().trim() : socket.handshake.address)) return ack({ ok: false, error: 'Too many orders. Please wait a minute.' });
