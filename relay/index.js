@@ -15,6 +15,7 @@ const db = new Database(path.join(dataDir, 'relay.db'));
 db.pragma('journal_mode = WAL');
 db.exec(`CREATE TABLE IF NOT EXISTS snapshot (id INTEGER PRIMARY KEY, json TEXT NOT NULL, updated INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS requests (id TEXT PRIMARY KEY, payload TEXT NOT NULL, result TEXT, created INTEGER NOT NULL);`);
+if (!db.prepare('PRAGMA table_info(requests)').all().some(c=>c.name==='receipt')) db.exec('ALTER TABLE requests ADD COLUMN receipt TEXT');
 const app = express();
 app.disable('x-powered-by');
 app.use(express.json({ limit: '256kb' }));
@@ -38,6 +39,10 @@ app.post('/relay/snapshot', (req, res) => {
   // Never publish host settings, tokens, customer notes, order lists or local logo paths.
   const safe = { tables: tables.map(({ id, label }) => ({ id, label })), menu: menu.filter((m) => m.available).map(({ id, name, description, price, category, available, sortOrder }) => ({ id, name, description, price, category, available, sortOrder })), brand: { name: brand.name, accent: brand.accent, logoUrl: '' } };
   db.prepare('INSERT INTO snapshot VALUES (1, ?, ?) ON CONFLICT(id) DO UPDATE SET json=excluded.json, updated=excluded.updated').run(JSON.stringify(safe), Date.now());
+  for (const receipt of req.body.receipts || []) {
+    const row = db.prepare('SELECT payload FROM requests WHERE id=?').get(receipt.order?.id);
+    if (row && JSON.parse(row.payload).receiptToken === receipt.token && /^[0-9a-f]{64}$/.test(receipt.token)) db.prepare('UPDATE requests SET receipt=? WHERE id=?').run(JSON.stringify(receipt.order),receipt.order.id);
+  }
   io.emit('hub:hello', hello()); io.emit('menu:updated', safe.menu);
   res.json({ ok: true });
 });
@@ -49,6 +54,15 @@ app.post('/relay/orders/:id', (req, res) => {
   if (typeof req.body?.ok !== 'boolean') return res.status(400).json({ error: 'Invalid result' });
   db.prepare('UPDATE requests SET result = ? WHERE id = ? AND result IS NULL').run(JSON.stringify(req.body), req.params.id);
   res.json({ ok: true });
+});
+app.get('/api/customer/orders/:id', (req,res) => {
+  res.set('Cache-Control','no-store');
+  const row = db.prepare('SELECT * FROM requests WHERE id=?').get(req.params.id);
+  const token = req.get('X-Order-Receipt') || '';
+  if (!row || !/^[0-9a-f]{64}$/.test(token) || JSON.parse(row.payload).receiptToken !== token) return res.status(404).json({ error:'Order receipt not found' });
+  const order = row.receipt ? JSON.parse(row.receipt) : row.result ? JSON.parse(row.result).order : null;
+  if (!order) return res.status(404).json({ error:'Waiting for cafe confirmation' });
+  res.json(order);
 });
 app.get('/api/hub', (_req, res) => res.json(hello()));
 app.get('/api/menu', (_req, res) => res.json(snapshot().menu));
@@ -76,7 +90,8 @@ io.on('connection', (socket) => {
       const current = snapshot();
       if (!current.online) return ack({ ok: false, error: 'The cafe is offline. Please order with staff.' });
       if (!current.tables.some((t) => t.id === payload.tableId) || !Array.isArray(payload.items) || !payload.items.length || payload.items.length > 100 || payload.items.some((i) => !current.menu.some((m) => m.id === i.id) || !Number.isInteger(i.qty) || i.qty < 1 || i.qty > 99)) return ack({ ok: false, error: 'Review your table and cart.' });
-      const safe = { tableId: payload.tableId, items: payload.items.map(({ id, qty }) => ({ id, qty })), note: String(payload.note || '').slice(0, 200) };
+      if (payload.receiptToken && !/^[0-9a-f]{64}$/.test(payload.receiptToken)) return ack({ ok:false,error:'Invalid order receipt' });
+      const safe = { receiptToken: payload.receiptToken, tableId: payload.tableId, items: payload.items.map(({ id, qty }) => ({ id, qty })), note: String(payload.note || '').slice(0, 200) };
       db.prepare('INSERT INTO requests (id,payload,created) VALUES (?,?,?)').run(id, JSON.stringify(safe), Date.now());
     }
     // Acknowledge success only after SQLite on the cafe hub accepted the order.

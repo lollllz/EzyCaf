@@ -64,7 +64,7 @@ export default function HubPage() {
 
   return (
     <div className="min-h-screen bg-white text-ink">
-      <header className="border-b border-line px-6 py-5 flex flex-wrap items-center justify-between gap-4">
+      <header className="print-hide border-b border-line px-6 py-5 flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-4">
           {brand?.logoUrl ? (
             <img
@@ -87,6 +87,7 @@ export default function HubPage() {
         </nav>
       </header>
 
+      <div className="print-hide mx-auto flex max-w-6xl flex-wrap items-center gap-3 px-6 pt-6"><button className="btn btn-accent" onClick={()=>window.print()} disabled={!hub || hub.tables.some(t=>!qrMap[t.id])}>Print all table QR codes</button><p className="text-sm text-muted">Place one QR card on each table. Reprint after changing the hub or public ordering address.</p></div>
       <main className="mx-auto max-w-6xl px-6 py-10">
         {!hub ? (
           <p className="text-muted">Loading hub…</p>
@@ -95,7 +96,7 @@ export default function HubPage() {
             {hub.tables.map((t) => {
               const publicUrl = tablePublicUrl(hub.customerUrl || hub.baseUrl, t.id, hashMode);
               return (
-                <div key={t.id} className="flex flex-col items-center rounded-2xl border border-line bg-white p-6 shadow-sm">
+                <div key={t.id} className="qr-print-card flex flex-col items-center rounded-2xl border border-line bg-white p-6 shadow-sm">
                   {brand?.logoUrl ? (
                     <img
                       src={brand.logoUrl}
@@ -114,9 +115,10 @@ export default function HubPage() {
                   />
                   <p className="text-lg font-bold">{t.label}</p>
                   <p className="mt-1 text-xs text-muted break-all text-center">{publicUrl}</p>
+                  {qrMap[t.id] ? <a className="print-hide btn btn-ghost mt-3" download={`EzyCaf-${t.id}-QR.svg`} href={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(qrMap[t.id])}`}>Download QR</a>:null}
                   <Link
                     to={`/t/${t.id}`}
-                    className="mt-3 text-sm font-semibold"
+                    className="print-hide mt-3 text-sm font-semibold"
                     style={{ color: 'var(--accent)' }}
                   >
                     Open menu →

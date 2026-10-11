@@ -13,3 +13,11 @@ To walk through onboarding instead, run `bash Demo-Mac.command --setup`. To leav
 For a fresh demo, stop the launcher and move the `.demo/data` folder elsewhere as a backup before launching again. This removes demo history from the next session. Moving the entire extracted folder also moves its demo data.
 
 This is a demo launcher, not a production deployment or a desktop/APK installer builder. Staff access retains the project's local-network trust model.
+
+## Ordering and table QR cards
+
+Customers switch between Menu and My orders. New orders include a private receipt saved in that browser and update automatically through received, preparing, ready, served and paid. Pre-existing sample orders are staff demo tickets; they have no customer receipt. Local receipt records survive hub restarts. Public-service receipts last up to 24 hours and need the hub online for fresh status.
+
+Kitchen staff mark ready food **Served · remove ticket** once handed over. The ticket leaves the kitchen, while the unpaid bill stays with the cashier. The cashier selects **Paid** after collecting payment. This records payment status; it does not charge a payment card.
+
+The table hub provides **Download QR** for each SVG and **Print all table QR codes**. In the browser print dialog, choose a printer or Save as PDF. Downloaded QR links use the current hub/public-service address, so reprint them if that changes. Interactive feedback respects the device's reduced-motion setting.

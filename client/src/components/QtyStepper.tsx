@@ -7,19 +7,19 @@ interface Props {
 
 export default function QtyStepper({ value, onChange, min = 0, max = 99 }: Props) {
   return (
-    <div className="inline-flex items-center gap-1 rounded-xl border border-line bg-white">
+    <div className="qty-stepper inline-flex items-center gap-1 rounded-xl border border-line bg-white">
       <button
         type="button"
-        className="flex h-11 w-11 items-center justify-center text-lg font-semibold text-ink"
+        className="flex h-12 w-12 items-center justify-center text-lg font-semibold text-ink"
         aria-label="Decrease"
         onClick={() => onChange(Math.max(min, value - 1))}
       >
         −
       </button>
-      <span className="min-w-[2ch] text-center text-base font-semibold tabular-nums">{value}</span>
+      <span key={value} className="motion-chip min-w-[2ch] text-center text-base font-semibold tabular-nums">{value}</span>
       <button
         type="button"
-        className="flex h-11 w-11 items-center justify-center text-lg font-semibold text-ink"
+        className="flex h-12 w-12 items-center justify-center text-lg font-semibold text-ink"
         aria-label="Increase"
         onClick={() => onChange(Math.min(max, value + 1))}
       >

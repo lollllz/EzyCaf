@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useSocket } from '../hooks/useSocket';
 import StatusChip from '../components/StatusChip';
@@ -7,14 +8,17 @@ import type { Order } from '../lib/types';
 export default function CashierPage() {
   const { hub, orders, clearTable, connected } = useSocket();
 
+  const [busy,setBusy]=useState<string|null>(null);
+  const [error,setError]=useState('');
   const tables = hub?.tables || [];
 
   function ordersFor(tableId: string): Order[] {
     return orders.filter((o) => o.tableId === tableId && o.status !== 'paid');
   }
 
-  async function pay(tableId: string) {
-    await clearTable(tableId);
+  async function markPaid(tableId: string) {
+    if(busy) return;setBusy(tableId);setError('');
+    const result=await clearTable(tableId);if(!result.ok)setError(result.error||'Could not mark paid');setBusy(null);
   }
 
   return (
@@ -33,6 +37,7 @@ export default function CashierPage() {
         </nav>
       </header>
 
+      {error ? <p role="alert" className="p-4 text-red-700">{error}</p>:null}
       <main className="mx-auto max-w-6xl p-5">
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {tables.map((t) => {
@@ -83,19 +88,11 @@ export default function CashierPage() {
                   <div className="flex gap-2">
                     <button
                       type="button"
-                      className="btn btn-ghost flex-1"
-                      disabled={!open}
-                      onClick={() => pay(t.id)}
-                    >
-                      Clear
-                    </button>
-                    <button
-                      type="button"
                       className="btn btn-accent flex-1"
-                      disabled={!open}
-                      onClick={() => pay(t.id)}
+                      disabled={!open || !connected || busy!==null}
+                      onClick={() => markPaid(t.id)}
                     >
-                      Pay
+                      Paid
                     </button>
                   </div>
                 </div>

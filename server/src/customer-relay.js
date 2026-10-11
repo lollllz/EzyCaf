@@ -15,7 +15,7 @@ export function startCustomerRelay(snapshot, accept) {
       if (!response.ok) throw new Error(`relay_http_${response.status}`);
       for (const request of await response.json()) {
         let result;
-        try { const { order } = accept(request.payload, request.id); result = { ok: true, orderId: order.id }; }
+        try { const { order } = accept(request.payload, request.id); result = { ok: true, orderId: order.id, order }; }
         catch (error) { result = { ok: false, error: error.message }; }
         const ack = await fetch(`${config.url}/relay/orders/${encodeURIComponent(request.id)}`, { method: 'POST', headers, body: JSON.stringify(result), signal: AbortSignal.timeout(8000) });
         if (!ack.ok) throw new Error(`relay_ack_${ack.status}`);

@@ -121,6 +121,8 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .btn,
+  .qty-stepper button,
   .motion-fade,
   .motion-chip,
   .motion-tile,
@@ -130,4 +132,19 @@ body {
     animation: none !important;
     transition: none !important;
   }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .btn { transition: transform 140ms ease, background-color 160ms ease, box-shadow 160ms ease; }
+  .qty-stepper button { transition: transform 140ms ease, background-color 160ms ease; }
+  .qty-stepper button:active { transform:scale(0.9);background:#e6eee9; }
+  .btn:not(:disabled):active { transform: scale(0.96); }
+  .card { animation: motionTileIn 220ms ease-out both; }
+  @media (hover:hover) { .btn:not(:disabled):hover { transform: translateY(-1px); box-shadow: 0 4px 12px #215c4718; } }
+}
+@media print {
+  .print-hide { display:none !important; }
+  .qr-print-card { break-inside:avoid; box-shadow:none !important; }
+  main > .grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:20px; }
+  body { background:white; }
 }

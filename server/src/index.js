@@ -25,6 +25,8 @@ import {
   acknowledgeMenuDeletions,
   completeSetup,
   getRelayConfig,
+  getCustomerOrder,
+  getRelayReceipts,
 } from './db.js';
 import { getLanIp, getBaseUrl } from './lan.js';
 import { acceptOrder } from './order-service.js';
@@ -133,7 +135,7 @@ app.get('/api/health', (_req, res) => {
   });
 });
 
-const relayTick = startCustomerRelay(() => ({ tables: getTables(), brand: brandPayload(), menu: getMenu() }), (payload, id) => {
+const relayTick = startCustomerRelay(() => ({ tables: getTables(), brand: brandPayload(), menu: getMenu(), receipts: getRelayReceipts() }), (payload, id) => {
   const result = acceptOrder(payload, id);
   if (result.created) io.emit('order:new', result.order);
   return result;
@@ -300,6 +302,13 @@ app.get('/api/qr/:tableId', async (req, res) => {
   }
 });
 
+app.get('/api/customer/orders/:id', (req,res) => {
+  res.set('Cache-Control','no-store');
+  const order = getCustomerOrder(req.params.id, req.get('X-Order-Receipt'));
+  if (!order) return res.status(404).json({ error:'Order receipt not found' });
+  res.json(order);
+});
+
 app.get('/api/hub', (_req, res) => {
   res.json(hubHello());
 });
@@ -325,7 +334,7 @@ io.on('connection', (socket) => {
   socket.on('order:status', (payload, ack) => {
     try {
       const { orderId, status } = payload || {};
-      const allowed = ['pending', 'cooking', 'ready', 'paid'];
+      const allowed = ['pending', 'cooking', 'ready', 'served', 'paid'];
       if (!orderId || !allowed.includes(status)) {
         if (typeof ack === 'function') ack({ ok: false, error: 'Invalid status' });
         return;

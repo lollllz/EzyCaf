@@ -1,9 +1,13 @@
 import crypto from 'node:crypto';
-import { getMenu, getTables, getOrder, createOrder } from './db.js';
+import { getMenu, getTables, getOrder, createOrder, getCustomerOrder } from './db.js';
 
 export function acceptOrder(payload, id = `o_${crypto.randomBytes(8).toString('hex')}`) {
   const prior = getOrder(id);
-  if (prior) return { order: prior, created: false };
+  if (prior) {
+    if (payload.receiptToken && !getCustomerOrder(id, payload.receiptToken)) throw new Error('Invalid order receipt');
+    return { order: prior, created: false };
+  }
+  if (payload.receiptToken && !/^[0-9a-f]{64}$/.test(payload.receiptToken)) throw new Error('Invalid order receipt');
   if (!getTables().some((t) => t.id === payload?.tableId)) throw new Error('Unknown table');
   if (!Array.isArray(payload.items) || !payload.items.length || payload.items.length > 100) throw new Error('Invalid order');
   const menu = getMenu();
@@ -15,5 +19,5 @@ export function acceptOrder(payload, id = `o_${crypto.randomBytes(8).toString('h
     return { id: m.id, name: m.name, price: m.price, qty: item.qty, lineTotal: Math.round(m.price * item.qty * 100) / 100 };
   });
   const total = Math.round(items.reduce((sum, item) => sum + item.lineTotal, 0) * 100) / 100;
-  return { order: createOrder({ id, tableId: payload.tableId, items, total, note: String(payload.note || '').slice(0, 200) }), created: true };
+  return { order: createOrder({ id, tableId: payload.tableId, items, total, receiptToken: payload.receiptToken, note: String(payload.note || '').slice(0, 200) }), created: true };
 }
