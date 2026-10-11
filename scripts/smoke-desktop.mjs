@@ -27,7 +27,12 @@ try {
     await new Promise((resolve) => setTimeout(resolve, 300));
   }
   if (!ready) throw new Error('Packaged application did not start its cafe hub');
-  const setup = await (await fetch('http://127.0.0.1:3847/api/setup')).json();
+  if ((await fetch('http://127.0.0.1:3847/api/settings')).status !== 401) throw new Error('Packaged hub exposed staff settings');
+  const code = readFileSync(path.join(data, 'hub-data', 'staff-access.txt'), 'utf8').trim();
+  const login = await fetch('http://127.0.0.1:3847/api/staff/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code }) });
+  if (!login.ok) throw new Error('Packaged staff sign-in failed');
+  const cookie = login.headers.get('set-cookie').split(';')[0];
+  const setup = await (await fetch('http://127.0.0.1:3847/api/setup', { headers: { Cookie: cookie } })).json();
   if (setup.complete !== false) throw new Error('A fresh installation should open guided setup');
   const page = await fetch('http://127.0.0.1:3847/setup');
   if (!page.ok || !(await page.text()).includes('<html')) throw new Error('Packaged frontend was not served');

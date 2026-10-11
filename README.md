@@ -74,3 +74,5 @@ QR codes encode `http://<lan-ip>:<port>/t/<tableId>`.
 ## Health
 
 `GET /api/health` → `{ ok, lan, port, baseUrl }`.
+
+Staff sign-in now protects restaurant screens and APIs, including customers on the same Wi-Fi. See [staff access instructions](README-SETUP.md#staff-sign-in). Customer order updates require private receipt tokens. The local HTTP transport still requires HTTPS and network isolation for real cafe service.

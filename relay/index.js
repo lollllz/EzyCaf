@@ -1,4 +1,5 @@
 import express from 'express';
+import { securityHeaders } from './security-headers.js';
 import { createServer } from 'node:http';
 import { timingSafeEqual } from 'node:crypto';
 import fs from 'node:fs';
@@ -18,6 +19,7 @@ CREATE TABLE IF NOT EXISTS requests (id TEXT PRIMARY KEY, payload TEXT NOT NULL,
 if (!db.prepare('PRAGMA table_info(requests)').all().some(c=>c.name==='receipt')) db.exec('ALTER TABLE requests ADD COLUMN receipt TEXT');
 const app = express();
 app.disable('x-powered-by');
+app.use(securityHeaders);
 app.use(express.json({ limit: '256kb' }));
 const server = createServer(app);
 const io = new Server(server, { maxHttpBufferSize: 32768, allowRequest: (req, cb) => {
@@ -39,11 +41,15 @@ app.post('/relay/snapshot', (req, res) => {
   // Never publish host settings, tokens, customer notes, order lists or local logo paths.
   const safe = { tables: tables.map(({ id, label }) => ({ id, label })), menu: menu.filter((m) => m.available).map(({ id, name, description, price, category, available, sortOrder }) => ({ id, name, description, price, category, available, sortOrder })), brand: { name: brand.name, accent: brand.accent, logoUrl: '' } };
   db.prepare('INSERT INTO snapshot VALUES (1, ?, ?) ON CONFLICT(id) DO UPDATE SET json=excluded.json, updated=excluded.updated').run(JSON.stringify(safe), Date.now());
+  io.emit('hub:hello', hello()); io.emit('menu:updated', safe.menu);
+  res.json({ ok: true });
+});
+app.post('/relay/receipts', (req, res) => {
+  if (!Array.isArray(req.body.receipts)) return res.status(400).json({ error: 'Invalid receipt batch' });
   for (const receipt of req.body.receipts || []) {
     const row = db.prepare('SELECT payload FROM requests WHERE id=?').get(receipt.order?.id);
     if (row && JSON.parse(row.payload).receiptToken === receipt.token && /^[0-9a-f]{64}$/.test(receipt.token)) db.prepare('UPDATE requests SET receipt=? WHERE id=?').run(JSON.stringify(receipt.order),receipt.order.id);
   }
-  io.emit('hub:hello', hello()); io.emit('menu:updated', safe.menu);
   res.json({ ok: true });
 });
 app.get('/relay/orders', (_req, res) => {
@@ -70,10 +76,10 @@ app.get('/api/menu', (_req, res) => res.json(snapshot().menu));
 app.use('/api', (_req, res) => res.status(403).json({ error: 'Staff access is available only on the cafe network.' }));
 setInterval(() => io.emit('hub:hello', hello()), 2000).unref();
 const rates = new Map();
-function allowOrder(ip) {
+function allowOrder(ip, maximum = 10) {
   const now = Date.now(); const previous = rates.get(ip) || [];
   const recent = previous.filter((t) => now - t < 60000);
-  if (recent.length >= 10) return false;
+  if (recent.length >= maximum) return false;
   recent.push(now); rates.set(ip, recent); return true;
 }
 setInterval(() => { const now = Date.now(); for (const [ip, times] of rates) if (times.every((t) => now - t >= 60000)) rates.delete(ip); db.prepare('DELETE FROM requests WHERE result IS NOT NULL AND created < ?').run(now - 86400000); }, 60000).unref();
@@ -81,17 +87,22 @@ io.on('connection', (socket) => {
   socket.emit('hub:hello', hello()); socket.emit('menu:updated', snapshot().menu);
   socket.on('order:create', async (payload, ack) => {
     if (typeof ack !== 'function') return;
+    const ip = process.env.RELAY_TRUST_PROXY === '1' ? String(socket.handshake.headers['x-forwarded-for'] || socket.handshake.address).split(',').pop().trim() : socket.handshake.address;
+    if (!allowOrder(ip) || !allowOrder('global', 200)) return ack({ ok: false, error: 'Too many orders. Please wait a minute.' });
+    if (socket.data.orderPending) return ack({ ok: false, error: 'Wait for the previous confirmation.' });
+    socket.data.orderPending = true;
+    try {
     const id = payload?.requestId;
     if (typeof id !== 'string' || !/^q_[0-9a-f-]{36}$/.test(id)) return ack({ ok: false, error: 'Invalid order reference' });
     const existing = db.prepare('SELECT * FROM requests WHERE id=?').get(id);
     if (existing && JSON.parse(existing.payload).receiptToken && JSON.parse(existing.payload).receiptToken !== payload.receiptToken) return ack({ok:false,error:'Invalid order receipt'});
     if (existing?.result) return ack(JSON.parse(existing.result));
     if (!existing) {
-      if (!allowOrder(process.env.RELAY_TRUST_PROXY === '1' ? String(socket.handshake.headers['x-forwarded-for'] || socket.handshake.address).split(',').pop().trim() : socket.handshake.address)) return ack({ ok: false, error: 'Too many orders. Please wait a minute.' });
+
       const current = snapshot();
       if (!current.online) return ack({ ok: false, error: 'The cafe is offline. Please order with staff.' });
       if (!current.tables.some((t) => t.id === payload.tableId) || !Array.isArray(payload.items) || !payload.items.length || payload.items.length > 100 || payload.items.some((i) => !current.menu.some((m) => m.id === i.id) || !Number.isInteger(i.qty) || i.qty < 1 || i.qty > 99)) return ack({ ok: false, error: 'Review your table and cart.' });
-      if (payload.receiptToken && !/^[0-9a-f]{64}$/.test(payload.receiptToken)) return ack({ ok:false,error:'Invalid order receipt' });
+      if (!/^[0-9a-f]{64}$/.test(payload.receiptToken || '')) return ack({ ok:false,error:'Invalid order receipt' });
       const safe = { receiptToken: payload.receiptToken, tableId: payload.tableId, items: payload.items.map(({ id, qty }) => ({ id, qty })), note: String(payload.note || '').slice(0, 200) };
       db.prepare('INSERT INTO requests (id,payload,created) VALUES (?,?,?)').run(id, JSON.stringify(safe), Date.now());
     }
@@ -102,6 +113,7 @@ io.on('connection', (socket) => {
       await new Promise((resolve) => setTimeout(resolve, 250));
     }
     ack({ ok: false, error: 'Confirmation is delayed. Try again with the same cart or ask staff; do not create a different order.' });
+    } finally { socket.data.orderPending = false; }
   });
   for (const event of ['order:status', 'table:clear']) socket.on(event, (_payload, ack) => { if (typeof ack === 'function') ack({ ok: false, error: 'Staff access is local only.' }); });
 });

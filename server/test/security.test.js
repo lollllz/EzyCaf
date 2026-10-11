@@ -1,0 +1,54 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import net from 'node:net';
+import http from 'node:http';
+import { spawn } from 'node:child_process';
+import crypto from 'node:crypto';
+import { io } from 'socket.io-client';
+const root = path.resolve(import.meta.dirname, '../..');
+function emit(socket, event, payload) { return new Promise((resolve, reject) => socket.timeout(5000).emit(event, payload, (error, result) => error ? reject(error) : resolve(result))); }
+async function connect(socket) { await new Promise((resolve,reject) => { socket.once('connect',resolve); socket.once('connect_error',reject); socket.connect(); }); }
+test('guest isolation, staff authentication, receipt privacy, uploads, origin guards and abuse limits', async t => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'ezycaf-security-'));
+  const probe = net.createServer(); await new Promise(r => probe.listen(0, '127.0.0.1', r)); const port = probe.address().port; await new Promise(r => probe.close(r));
+  const child = spawn(process.execPath, ['server/src/index.js'], { cwd: root, env: { ...process.env, PORT: String(port), EZYCAF_DATA_DIR: dir, EZYCAF_UPLOAD_DIR: path.join(dir,'uploads') }, stdio: 'ignore' });
+  const sockets = []; t.after(async () => { sockets.forEach(s => s.disconnect()); const done = new Promise(r => child.once('exit',r)); child.kill(); await done; await rm(dir,{recursive:true,force:true}); });
+  const base = `http://127.0.0.1:${port}`;
+  for (let i=0;i<100;i++) { try { if((await fetch(base+'/api/health')).ok) break; } catch {} await new Promise(r=>setTimeout(r,100)); }
+  for (const route of ['/api/settings','/api/orders','/api/orders/active','/api/orders/table/t1','/api/setup']) assert.equal((await fetch(base+route)).status,401,route);
+  for (const [route,method] of [['/api/menu','POST'],['/api/menu/m1','DELETE'],['/api/settings','PUT'],['/api/settings/logo','POST'],['/api/setup','POST']]) assert.equal((await fetch(base+route,{method,headers:{'Content-Type':'application/json'},body:method==='DELETE'?undefined:'{}'})).status,401,route);
+  assert.equal((await fetch(base+'/api/menu',{headers:{Origin:'https://untrusted.example'}})).status,403);
+  assert.equal(await new Promise((resolve,reject) => { http.get(base+'/api/menu',{headers:{Host:'untrusted.example'}},response=>{response.resume();resolve(response.statusCode);}).on('error',reject); }),403);
+  const health = await fetch(base+'/api/health'); assert.equal(health.headers.get('x-content-type-options'),'nosniff'); assert.equal(health.headers.get('x-frame-options'),'DENY'); assert.match(health.headers.get('content-security-policy'),/object-src 'none'/);
+  const login = code => fetch(base+'/api/staff/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code})});
+  assert.equal((await login('incorrect')).status,401);
+  const code = (await readFile(path.join(dir,'staff-access.txt'),'utf8')).trim(); if (process.platform !== 'win32') assert.equal((await stat(path.join(dir,'staff-access.txt'))).mode & 0o777,0o600);
+  const signedIn = await login(code); assert.equal(signedIn.status,200); const cookieHeader=signedIn.headers.get('set-cookie'); assert.match(cookieHeader,/HttpOnly/); assert.match(cookieHeader,/SameSite=Strict/); const cookie=cookieHeader.split(';')[0]; const headers={Cookie:cookie};
+  assert.equal((await fetch(base+'/api/settings',{headers})).status,200);
+  const guest=io(base,{autoConnect:false,transports:['websocket']}); sockets.push(guest); let snapshots=0, broadcasts=0;
+  guest.on('order:updated',()=>snapshots++); guest.on('order:new',()=>broadcasts++); await connect(guest);
+  const staff=io(base,{autoConnect:false,transports:['websocket'],extraHeaders:{Cookie:cookie}}); sockets.push(staff); await connect(staff);
+  const payload={tableId:'t1',requestId:`q_${crypto.randomUUID()}`,receiptToken:crypto.randomBytes(32).toString('hex'),items:[{id:'m1',qty:1,price:0.01}],note:'Private note <script>ignored()</script>'};
+  const created=await emit(guest,'order:create',payload); assert.equal(created.ok,true); assert.equal(created.order.total,12.5);
+  await new Promise(r=>setTimeout(r,150)); assert.equal(snapshots,0); assert.equal(broadcasts,0);
+  const receipt=base+'/api/customer/orders/'+created.order.id;
+  assert.equal((await fetch(receipt)).status,404); assert.equal((await fetch(receipt,{headers:{'X-Order-Receipt':'0'.repeat(64)}})).status,404);
+  const valid=await fetch(receipt,{headers:{'X-Order-Receipt':payload.receiptToken}}); assert.equal(valid.status,200); assert.equal(valid.headers.get('cache-control'),'no-store'); assert.equal((await valid.json()).note,payload.note);
+  assert.equal((await emit(guest,'order:create',{...payload,receiptToken:undefined})).ok,false);
+  assert.equal((await emit(guest,'order:status',{orderId:created.order.id,status:'paid'})).ok,false);
+  assert.equal((await emit(guest,'table:clear',{tableId:'t1'})).ok,false);
+  assert.equal((await emit(staff,'order:status',{orderId:created.order.id,status:'served'})).ok,true);
+  assert.equal((await(await fetch(receipt,{headers:{'X-Order-Receipt':payload.receiptToken}})).json()).status,'served');
+  const form = (bytes, type, name) => { const f=new FormData();f.append('logo',new Blob([bytes],{type}),name);return f; };
+  assert.equal((await fetch(base+'/api/settings/logo',{method:'POST',headers,body:form('<svg onload="alert(1)"></svg>','image/svg+xml','test.svg')})).status,400);
+  assert.equal((await fetch(base+'/api/settings/logo',{method:'POST',headers,body:form('<svg onload="alert(1)"></svg>','image/png','test.png')})).status,400);
+  const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aHdQAAAAASUVORK5CYII=','base64');
+  const uploaded=await fetch(base+'/api/settings/logo',{method:'POST',headers,body:form(png,'image/png','hostile.svg')});assert.equal(uploaded.status,200);const logo=(await uploaded.json()).logoUrl;assert.match(logo,/\.png$/);assert.match((await fetch(base+logo)).headers.get('content-type'),/image\/png/);
+  assert.equal((await fetch(base+'/api/menu',{method:'POST',headers:{...headers,'Content-Type':'application/json'},body:JSON.stringify({name:'Invalid price',price:-5})})).status,400);
+  let limited=false;for(let i=0;i<12;i++){const r=await emit(guest,'order:create',{...payload,requestId:`q_${crypto.randomUUID()}`,items:[]});if(/Too many/.test(r.error||''))limited=true;}assert.equal(limited,true);
+  assert.equal((await fetch(base+'/api/staff/logout',{method:'POST',headers})).status,200);assert.equal((await fetch(base+'/api/settings',{headers})).status,401);
+  for(let i=0;i<4;i++)await login('incorrect');assert.equal((await login(code)).status,429);
+});

@@ -73,6 +73,7 @@ if exist client\package.json (
 
 if not defined PORT set "PORT=3847"
 set "NODE_ENV=production"
+set "EZYCAF_SHOW_STAFF_CODE=1"
 
 echo.
 echo Starting EzyCaf Hub on port %PORT%...

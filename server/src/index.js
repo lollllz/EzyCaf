@@ -1,4 +1,5 @@
 import express from 'express';
+import { staff, requireStaff, installStaffRoutes, limit, headers, getStaffAccessCode } from './staff-security.js';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import path from 'path';
@@ -45,8 +46,11 @@ if (!fs.existsSync(UPLOADS)) fs.mkdirSync(UPLOADS, { recursive: true });
 initDb();
 
 const app = express();
+app.disable('x-powered-by');
+app.use(headers);
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
+  maxHttpBufferSize: 32768,
   allowRequest: (req, callback) => callback(null, allowedRequest(req)),
 });
 
@@ -55,20 +59,25 @@ app.use((req, res, next) => {
   next();
 });
 app.use(express.json({ limit: '1mb' }));
+installStaffRoutes(app, io);
+app.use('/api', (req, res, next) => {
+  const publicRead = req.method === 'GET' && /^\/(health|hub|menu|tables|qr\/[^/]+|customer\/orders\/[^/]+)$/.test(req.path);
+  return publicRead ? next() : requireStaff(req, res, next);
+});
 app.use('/uploads', express.static(UPLOADS));
 
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => cb(null, UPLOADS),
   filename: (_req, file, cb) => {
-    const ext = path.extname(file.originalname).toLowerCase() || '.png';
-    cb(null, `logo-${Date.now()}${ext}`);
+    const ext = '.upload';
+    cb(null, `logo-${crypto.randomBytes(16).toString('hex')}${ext}`);
   },
 });
 const upload = multer({
   storage,
   limits: { fileSize: 200 * 1024 },
   fileFilter: (_req, file, cb) => {
-    if (/^image\/(png|jpe?g|webp|gif|svg\+xml)$/i.test(file.mimetype)) cb(null, true);
+    if (/^image\/(png|jpe?g|webp|gif)$/i.test(file.mimetype)) cb(null, true);
     else cb(new Error('Only image uploads allowed'));
   },
 });
@@ -137,7 +146,7 @@ app.get('/api/health', (_req, res) => {
 
 const relayTick = startCustomerRelay(() => ({ tables: getTables(), brand: brandPayload(), menu: getMenu(), receipts: getRelayReceipts() }), (payload, id) => {
   const result = acceptOrder(payload, id);
-  if (result.created) io.emit('order:new', result.order);
+  if (result.created) io.to('staff').emit('order:new', result.order);
   return result;
 });
 
@@ -211,7 +220,15 @@ app.put('/api/settings', (req, res) => {
 
 app.post('/api/settings/logo', upload.single('logo'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file' });
-  const logoUrl = `/uploads/${req.file.filename}`;
+  const bytes = fs.readFileSync(req.file.path);
+  const ext = bytes.subarray(0, 8).equals(Buffer.from([137,80,78,71,13,10,26,10])) ? '.png'
+    : bytes.subarray(0,3).equals(Buffer.from([255,216,255])) ? '.jpg'
+    : /^(GIF87a|GIF89a)$/.test(bytes.subarray(0,6).toString()) ? '.gif'
+    : bytes.subarray(0,4).toString() === 'RIFF' && bytes.subarray(8,12).toString() === 'WEBP' ? '.webp' : null;
+  if (!ext) { fs.unlinkSync(req.file.path); return res.status(400).json({ error: 'Upload a PNG, JPEG, GIF or WebP image.' }); }
+  const filename = req.file.filename.replace(/\.upload$/, ext);
+  fs.renameSync(req.file.path, path.join(UPLOADS, filename));
+  const logoUrl = `/uploads/${filename}`;
   setSetting('logoUrl', logoUrl);
   io.emit('hub:hello', hubHello());
   res.json({ logoUrl, ...getSettings() });
@@ -233,6 +250,7 @@ app.get('/api/menu', (_req, res) => {
 
 app.post('/api/menu', (req, res) => {
   const body = req.body || {};
+  if (!Number.isFinite(Number(body.price)) || Number(body.price) < 0 || Number(body.price) > 100000) return res.status(400).json({ error: 'Enter a price between 0 and 100000.' });
   const id = body.id || `m_${crypto.randomBytes(4).toString('hex')}`;
   const item = upsertMenuItem({
     id,
@@ -250,6 +268,7 @@ app.post('/api/menu', (req, res) => {
 
 app.put('/api/menu/:id', (req, res) => {
   const body = req.body || {};
+  if (!Number.isFinite(Number(body.price)) || Number(body.price) < 0 || Number(body.price) > 100000) return res.status(400).json({ error: 'Enter a price between 0 and 100000.' });
   const item = upsertMenuItem({
     id: req.params.id,
     name: String(body.name || 'Item').slice(0, 120),
@@ -318,13 +337,14 @@ app.get('/api/hub', (_req, res) => {
 io.on('connection', (socket) => {
   socket.emit('hub:hello', hubHello());
   socket.emit('menu:updated', getMenu());
-  socket.emit('order:updated', { type: 'snapshot', orders: getActiveOrders() });
+  if (staff(socket.request)) { socket.join('staff'); socket.emit('order:updated', { type: 'snapshot', orders: getActiveOrders() }); }
 
   socket.on('order:create', (payload, ack) => {
+    if (!limit(`orders:${socket.handshake.address}`, 10) || !limit('all-orders', 200)) return typeof ack === 'function' && ack({ ok: false, error: 'Too many orders. Wait a minute.' });
     try {
       const requestId = /^q_[0-9a-f-]{36}$/.test(payload?.requestId || '') ? payload.requestId : undefined;
       const { order, created } = acceptOrder(payload, requestId);
-      if (created) io.emit('order:new', order);
+      if (created) io.to('staff').emit('order:new', order);
       if (typeof ack === 'function') ack({ ok: true, order });
     } catch (error) {
       if (typeof ack === 'function') ack({ ok: false, error: error.message });
@@ -332,6 +352,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('order:status', (payload, ack) => {
+    if (!staff(socket.request)) { socket.leave('staff'); return typeof ack === 'function' && ack({ ok: false, error: 'Staff sign-in required.' }); }
     try {
       const { orderId, status } = payload || {};
       const allowed = ['pending', 'cooking', 'ready', 'served', 'paid'];
@@ -344,7 +365,7 @@ io.on('connection', (socket) => {
         if (typeof ack === 'function') ack({ ok: false, error: 'Not found' });
         return;
       }
-      io.emit('order:updated', order);
+      io.to('staff').emit('order:updated', order);
       if (typeof ack === 'function') ack({ ok: true, order });
     } catch (err) {
       if (typeof ack === 'function') ack({ ok: false, error: String(err.message || err) });
@@ -352,6 +373,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('table:clear', (payload, ack) => {
+    if (!staff(socket.request)) { socket.leave('staff'); return typeof ack === 'function' && ack({ ok: false, error: 'Staff sign-in required.' }); }
     try {
       const tableId = payload?.tableId;
       if (!tableId) {
@@ -359,7 +381,7 @@ io.on('connection', (socket) => {
         return;
       }
       clearTable(tableId);
-      io.emit('table:cleared', { tableId });
+      io.to('staff').emit('table:cleared', { tableId });
       if (typeof ack === 'function') ack({ ok: true });
     } catch (err) {
       if (typeof ack === 'function') ack({ ok: false, error: String(err.message || err) });
@@ -378,8 +400,12 @@ if (fs.existsSync(CLIENT_DIST)) {
   });
 }
 
+setInterval(() => { for (const socket of io.sockets.sockets.values()) if (socket.rooms.has('staff') && !staff(socket.request)) socket.disconnect(true); }, 10000).unref();
+app.use((error, req, res, next) => { if (res.headersSent) return next(error); res.status(400).json({ error: 'Invalid request or image upload.' }); });
+
 httpServer.listen(PORT, '0.0.0.0', () => {
   const lan = getLanIp();
+  if (process.env.EZYCAF_SHOW_STAFF_CODE === '1') console.log(`Staff access code (keep private): ${getStaffAccessCode()}`);
   console.log(`EzyCaf Hub listening on 0.0.0.0:${PORT}`);
   console.log(`  Local:  http://localhost:${PORT}`);
   console.log(`  LAN:    http://${lan}:${PORT}`);

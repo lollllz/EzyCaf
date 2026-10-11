@@ -7,6 +7,7 @@ import CustomerPage from './pages/CustomerPage';
 import KitchenPage from './pages/KitchenPage';
 import CashierPage from './pages/CashierPage';
 import SetupPage from './pages/SetupPage';
+import StaffGate from './components/StaffGate';
 import AdminPage from './pages/AdminPage';
 
 export default function App() {
@@ -28,7 +29,7 @@ export default function App() {
 
   if (hub?.networkMode === 'customer-relay' && !location.pathname.startsWith('/t/')) return <main className="p-8">Staff access works only on the cafe network. Scan your table QR for the customer menu.</main>;
 
-  return (
+  const content = (
     <>
       {isDemo ? <DemoBanner /> : null}
       {!isDemo && !connected ? <div role="status" className="border-b border-amber-200 bg-amber-50 p-3 text-center text-sm">{hub?.networkMode === 'customer-relay' ? 'Reconnecting to the cafe ordering service. Check your internet connection.' : 'Connecting to the cafe hub. Stay on the cafe Wi-Fi; live actions need a connection.'}</div> : null}
@@ -43,4 +44,5 @@ export default function App() {
       </Routes>
     </>
   );
+  return location.pathname.startsWith('/t/') || isDemo ? content : <StaffGate>{content}</StaffGate>;
 }

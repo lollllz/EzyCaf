@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog, utilityProcess } = require('electron');
+const { app, BrowserWindow, dialog, utilityProcess, Menu } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
 const net = require('node:net');
@@ -43,7 +43,18 @@ async function start() {
   window = new BrowserWindow({ width: 1200, height: 850, minWidth: 360, minHeight: 600, title: 'EzyCaf', backgroundColor: '#F7F5EF', webPreferences: { nodeIntegration: false, contextIsolation: true, sandbox: true } });
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   window.webContents.on('will-navigate', (event, url) => { if (new URL(url).origin !== origin) event.preventDefault(); });
-  const setup = await (await fetch(`${origin}/api/setup`)).json();
+  const code = fs.readFileSync(path.join(data, 'staff-access.txt'), 'utf8').trim();
+  Menu.setApplicationMenu(Menu.buildFromTemplate([
+    { label: 'EzyCaf', submenu: [
+      { label: 'Staff access code', click: () => dialog.showMessageBox(window, { title: 'Staff access code', message: code, detail: 'Share only with cafe staff. Staff sign-in also requires the cafe network.' }) },
+      { type: 'separator' }, { role: 'quit' },
+    ] },
+    { role: 'editMenu' }, { role: 'viewMenu' },
+  ]));
+  const signedIn = await fetch(`${origin}/api/staff/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code }) });
+  if (!signedIn.ok) throw new Error('Could not authenticate the desktop host.');
+  const cookie = signedIn.headers.get('set-cookie').split(';')[0];
+  const setup = await (await fetch(`${origin}/api/setup`, { headers: { Cookie: cookie } })).json();
   await window.loadURL(`${origin}${setup.complete ? '/' : '/setup'}`);
   if (process.env.EZYCAF_SMOKE_TEST === '1') setTimeout(() => app.quit(), 5000);
 }
