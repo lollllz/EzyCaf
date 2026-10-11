@@ -3,7 +3,7 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
-  const base = env.VITE_BASE || (mode === 'pages' ? '/kamil/' : '/');
+  const base = env.VITE_BASE || (mode === 'pages' ? '/EzyCaf/' : '/');
 
   return {
     plugins: [react()],

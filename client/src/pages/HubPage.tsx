@@ -74,7 +74,7 @@ export default function HubPage() {
             />
           ) : null}
           <div>
-            <h1 className="text-2xl font-bold tracking-tight">{brand?.name || 'Kamil'}</h1>
+            <h1 className="text-2xl font-bold tracking-tight">{brand?.name || 'EzyCaf'}</h1>
             <p className="text-muted text-sm">
               Scan a table QR to order · {connected ? (isDemo ? 'Demo' : 'Live') : 'Connecting…'}
             </p>

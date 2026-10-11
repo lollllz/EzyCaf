@@ -1,7 +1,7 @@
 import type { Brand, HubHello, MenuItem, Order, OrderLine, TableInfo } from './types';
 
 export const DEMO_BRAND: Brand = {
-  name: 'Kamil Demo',
+  name: 'EzyCaf Demo',
   accent: '#0F766E',
   logoUrl: '',
 };
@@ -127,7 +127,7 @@ export function demoHubHello(): HubHello {
   const base =
     typeof window !== 'undefined'
       ? `${window.location.origin}${import.meta.env.BASE_URL.replace(/\/$/, '')}`
-      : 'https://lollllz.github.io/kamil';
+      : 'https://lollllz.github.io/EzyCaf';
   return {
     tables: DEMO_TABLES,
     baseUrl: base,

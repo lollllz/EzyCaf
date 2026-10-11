@@ -13,7 +13,7 @@ Static client-only demo with in-memory orders (Customer → Kitchen → Cashier)
 Rebuild & publish:
 
 ```bash
-npm run build:pages          # VITE_DEMO=true, base /kamil/
+npm run build:pages          # VITE_DEMO=true, base /EzyCaf/
 npx gh-pages -d client/dist  # or: npm run deploy:pages
 ```
 
@@ -67,7 +67,7 @@ npm run start -w server
 
 ## Data
 
-SQLite file at `server/data/kamil.db`. Seeded with a demo menu and four tables (`t1`–`t4`). Logos land in `/uploads`.
+SQLite file at `server/data/ezycaf.db`. Seeded with a demo menu and four tables (`t1`–`t4`). Logos land in `/uploads`.
 
 QR codes encode `http://<lan-ip>:<port>/t/<tableId>`.
 

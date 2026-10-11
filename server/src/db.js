@@ -7,7 +7,21 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const dataDir = process.env.EZYCAF_DATA_DIR || path.join(__dirname, '..', 'data');
 if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
 
-const dbPath = path.join(dataDir, 'kamil.db');
+const dbPath = path.join(dataDir, 'ezycaf.db');
+// Preserve an existing store when upgrading from an earlier database filename.
+if (!fs.existsSync(dbPath)) {
+  const candidates = fs.readdirSync(dataDir).filter((name) => name.endsWith('.db'));
+  const stores = candidates.filter((name) => {
+    const existing = new Database(path.join(dataDir, name), { readonly: true });
+    try { return ['settings', 'tables', 'menu_items', 'orders'].every((table) => existing.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(table)); }
+    finally { existing.close(); }
+  });
+  if (stores.length > 1) throw new Error('Multiple cafe databases found. Select the intended store before upgrading.');
+  if (stores.length === 1) {
+    const existing = new Database(path.join(dataDir, stores[0]), { readonly: true });
+    try { await existing.backup(dbPath); } finally { existing.close(); }
+  }
+}
 const db = new Database(dbPath);
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');

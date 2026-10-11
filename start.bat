@@ -34,7 +34,7 @@ if not exist package.json (
   exit /b 1
 )
 
-echo === Kamil — Restaurant Order Management ===
+echo === EzyCaf — Restaurant Order Management ===
 echo Node.js %NODE_VERSION%
 echo.
 
@@ -75,7 +75,7 @@ if not defined PORT set "PORT=3847"
 set "NODE_ENV=production"
 
 echo.
-echo Starting Kamil Hub on port %PORT%...
+echo Starting EzyCaf Hub on port %PORT%...
 echo   Local:   http://localhost:%PORT%
 echo   Hub:     http://localhost:%PORT%/
 echo   Kitchen: http://localhost:%PORT%/kitchen
